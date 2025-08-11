@@ -1,5 +1,3 @@
-# RSV Forecasting Hub Parser
-
 This tool processes RSV Forecasting Hub model outputs and generates consolidated JSON-LD metadata files for each forecasting round.
 
 ## Installation
