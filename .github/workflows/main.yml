@@ -27,7 +27,7 @@ jobs:
         pip install -r requirements.txt
         
     - name: Download source data
-      run: python update_source_Data.py
+      run: python update_source_data.py
       
     - name: Generate JSON-LD files
       run: python create_jsonld.py
