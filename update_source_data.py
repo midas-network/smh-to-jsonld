@@ -6,6 +6,7 @@ import subprocess
 import datetime
 import io
 import sys
+import pandas as pd
 from contextlib import redirect_stdout
 
 from utils.read_confg import read_repos_yaml
@@ -86,6 +87,17 @@ def get_github_release_tags(repo_url):
                 tag = parts[1].replace('refs/tags/', '')
                 if not tag.endswith('^{}'):  # Skip the peeled tag references
                     tags.append(tag)
+
+        # Select tag of interest
+        sel_tags = []
+        for tag in tags:
+            if re.findall("-v", tag):
+                sel_tag = [tag] + re.split("-v", tag)
+            else:
+                sel_tag = [tag, tag, '0']
+            sel_tags.append(sel_tag)
+        tag_df = pd.DataFrame(sel_tags).rename(columns={0: 'tag', 1: 'round', 2: 'version'})
+        tags = tag_df.loc[tag_df.groupby(['round'])["version"].idxmax()]["tag"].tolist()
 
         print(f"Found {len(tags)} tags in repository")
         return tags
