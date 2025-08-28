@@ -206,28 +206,27 @@ def yaml_to_jsonld(yaml_file_path):
         "name": data.get("model_name"),
         "alternateName": data.get("model_abbr"),
         "description": data.get("methods_long") or data.get("methods"),
-        "version": data.get("model_version"),
-        "license": data.get("license"),
-
-
-        # Add RSV disease information
-
+        "version": data.get("model_version")
+             # Add RSV disease information
     }
 
-    # Add the organization (team)
-    if data.get("team_name"):
-        jsonld["producer"] = {
-            "@type": "Organization",
-            "name": data.get("team_name"),
-            "alternateName": data.get("team_abbr"),
-            "url": data.get("website_url")
-        }
+    if data.get("license") not in ["NA", "na", "TBD"]:
+        jsonld["license"] = data.get("license")
 
-        if data.get("team_funding"):
-            jsonld["producer"]["funder"] = {
-                "@type": "Organization",
-                "description": data.get("team_funding")
-            }
+    if data.get("website_url") not in ["NA", "na", "TBD"]:
+        jsonld["website"] = data.get("website_url")
+
+     # Add the organization (team)
+    jsonld["producer"] = {
+        "@type": "Organization",
+        "name": data.get("team_name")
+    }
+
+    if data.get("team_funding") and data.get("team_funding") not in ["NA", "na", "TBD"]:
+        jsonld["producer"]["funder"] = {
+            "@type": "Organization",
+            "description": data.get("team_funding")
+        }
 
     # Add contributors as authors
     if "model_contributors" in data and data["model_contributors"]:
