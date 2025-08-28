@@ -53,12 +53,14 @@ def clone_and_extract_dirs(repo_url, dirs_to_copy, output_dir, ref='main', ref_t
         print(f"✅ Done! Selected directories copied to {output_dir}")
 
 
-def get_github_release_tags(repo_url):
+def get_github_release_tags(repo_url, last_version=True):
     """
     Get a list of release tags from a GitHub repository without cloning.
 
     Parameters:
         repo_url (str): GitHub repo URL (e.g., https://github.com/user/repo.git)
+        last_version (bool): If True, only returns last available version of each tag sharing the
+            same date ids, for tags in a `"YYYY-MM-DD-vX"` format (`"-vX"` optional)
 
     Returns:
         list: A list of release tags
@@ -89,15 +91,16 @@ def get_github_release_tags(repo_url):
                     tags.append(tag)
 
         # Select tag of interest
-        sel_tags = []
-        for tag in tags:
-            if re.findall("-v", tag):
-                sel_tag = [tag] + re.split("-v", tag)
-            else:
-                sel_tag = [tag, tag, '0']
-            sel_tags.append(sel_tag)
-        tag_df = pd.DataFrame(sel_tags).rename(columns={0: 'tag', 1: 'round', 2: 'version'})
-        tags = tag_df.loc[tag_df.groupby(['round'])["version"].idxmax()]["tag"].tolist()
+        if last_version:
+            sel_tags = []
+            for tag in tags:
+                if re.findall("-v", tag):
+                    sel_tag = [tag] + re.split("-v", tag)
+                else:
+                    sel_tag = [tag, tag, '0']
+                sel_tags.append(sel_tag)
+            tag_df = pd.DataFrame(sel_tags).rename(columns={0: 'tag', 1: 'round', 2: 'version'})
+            tags = tag_df.loc[tag_df.groupby(['round'])["version"].idxmax()]["tag"].tolist()
 
         print(f"Found {len(tags)} tags in repository")
         return tags
