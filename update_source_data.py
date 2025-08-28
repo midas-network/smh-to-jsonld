@@ -200,7 +200,7 @@ if __name__ == "__main__":
             for tag in tags:
                 try:
                     # Create tag-specific output directory
-                    tag_output_dir = os.path.join(base_output_dir, tag)
+                    tag_output_dir = os.path.join(base_output_dir, re.split("-v.", tag)[0])
                     os.makedirs(tag_output_dir, exist_ok=True)
 
                     print(f"\n🏷️ Processing tag: {tag}")
