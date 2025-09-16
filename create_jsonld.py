@@ -200,11 +200,15 @@ def yaml_to_jsonld(yaml_file_path):
         data = yaml.safe_load(file)
 
     # Create the basic JSON-LD structure
+    if len(data.get("team_abbr")) > 0:
+        team_name = data.get("team_abbr") + "-" + data.get("model_abbr")
+    else:
+        team_name = data.get("model_abbr")
     jsonld = {
         "@context": "https://schema.org/",
         "@type": "Dataset",
-        "name": data.get("model_name"),
-        "alternateName": data.get("model_abbr"),
+        "name": team_name,
+        ##"alternateName": data.get("model_abbr"),
         "description": data.get("methods_long") or data.get("methods"),
         "version": data.get("model_version")
              # Add RSV disease information
