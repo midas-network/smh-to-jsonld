@@ -128,6 +128,43 @@ def delete_ignored_files_and_directories(directory, ignore_files_regex):
             shutil.rmtree(dir_path)
 
 
+def keep_only_round_files(directory, round_id):
+    """
+    Delete and/or keep only files related to a specific round.
+
+    Parameters:
+        directory (str): Directory to search for files and directories to keep or remove
+        round_id (str): Round ID
+
+    """
+    # Clean Model output folder
+    model_dir = os.path.join(directory, "model-output")
+    for root, dirs, files in os.walk(model_dir):
+        for file in files:
+            if not re.search(round_id, file) and not re.search("README", file):
+                file_path = os.path.join(root, file)
+                print(f" File remove: {file_path}")
+                os.remove(file_path)
+    team_model_round = []
+    for root, dirs, files in os.walk(model_dir):
+        for dir in dirs:
+            dir_path = os.path.join(root, dir)
+            if len(os.listdir(dir_path)) == 0:
+                print(f" Empty folder remove: {dir_path}")
+                os.rmdir(dir_path)
+            else:
+                team_model_round.append(dir)
+    # Clean Metadata folder
+    metadata_dir = os.path.join(directory, "model-metadata")
+    for root, dirs, files in os.walk(metadata_dir):
+        for file in files:
+            team_model = re.split(".yaml|.yml", file)[0]
+            if team_model not in team_model_round + ["README.md"]:
+                file_path = os.path.join(root, file)
+                print(f" File remove: {file_path}")
+                os.remove(file_path)
+
+
 if __name__ == "__main__":
     # Capture stdout for logging
     output_capture = io.StringIO()
@@ -187,9 +224,14 @@ if __name__ == "__main__":
                     # Create tag-specific output directory
                     tag_output_dir = os.path.join(base_output_dir, tag)
                     os.makedirs(tag_output_dir, exist_ok=True)
+                    round_id = re.split("-v.", tag)[0]
 
                     print(f"\n🏷️ Processing tag: {tag}")
                     clone_and_extract_dirs(repo_url, directories, tag_output_dir, tag, 'tag')
+                    print(f"Cleaning Round: {round_id}")
+                    round_dir = os.path.join(base_output_dir, round_id)
+                    keep_only_round_files(round_dir, round_id)
+
                 except Exception as e:
                     print(f"❌ Error processing tag {tag} for repository {repo_url}: {e}")
 
