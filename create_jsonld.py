@@ -214,10 +214,12 @@ def yaml_to_jsonld(yaml_file_path):
              # Add RSV disease information
     }
 
-    if data.get("license") not in ["NA", "na", "TBD"]:
+    missing_val = ["NA", "na", "TBD", "N/A", "NaN"]
+
+    if data.get("license") not in missing_val:
         jsonld["license"] = data.get("license")
 
-    if data.get("website_url") not in ["NA", "na", "TBD"]:
+    if data.get("website_url") not in missing_val:
         jsonld["website"] = data.get("website_url")
 
      # Add the organization (team)
@@ -226,7 +228,7 @@ def yaml_to_jsonld(yaml_file_path):
         "name": data.get("team_name")
     }
 
-    if data.get("team_funding") and data.get("team_funding") not in ["NA", "na", "TBD"]:
+    if data.get("team_funding") and data.get("team_funding") not in missing_val:
         jsonld["producer"]["funder"] = {
             "@type": "Organization",
             "description": data.get("team_funding")
