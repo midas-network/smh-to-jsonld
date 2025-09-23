@@ -223,7 +223,7 @@ def yaml_to_jsonld(yaml_file_path):
         # Add RSV disease information
 
         "version": data.get("model_version")
-             # Add RSV disease information
+        # Add RSV disease information
     }
 
     missing_val = ["NA", "na", "TBD", "N/A", "NaN"]
@@ -234,7 +234,7 @@ def yaml_to_jsonld(yaml_file_path):
     if data.get("website_url") not in missing_val:
         jsonld["website"] = data.get("website_url")
 
-     # Add the organization (team)
+    # Add the organization (team)
     jsonld["producer"] = {
         "@type": "Organization",
         "name": data.get("team_name")
@@ -446,6 +446,36 @@ def process_metadata_for_round(round_id, metadata_dir, output_dir, config):
     return (results, global_field_values_dict)
 
 
+def get_diseases_by_round(tasks_json_path):
+    """
+    Extract disease information from each round in the tasks.json file.
+
+    Parameters:
+        tasks_json_path (str): Path to the tasks.json file
+
+    Returns:
+        dict: Dictionary with round_id as key and list of diseases as value
+    """
+    # Load the tasks.json file
+    with open(tasks_json_path, 'r') as f:
+        tasks_data = json.load(f)
+
+    diseases_by_round = {}
+
+    # Iterate through each round
+    for round_data in tasks_data['rounds']:
+        round_id = round_data.get('round_id')
+        diseases = round_data.get('disease', [])
+
+        # If round_id is from a variable, mark it accordingly
+        if round_data.get('round_id_from_variable', False):
+            round_id = f"{round_id} (variable)"
+
+        diseases_by_round[round_id] = diseases
+
+    return diseases_by_round
+
+
 def create_consolidated_round_jsonld(round_output_dir, round_id, config, global_field_values_dict):
     """
     Create a consolidated JSON-LD file for the entire round that includes data from all model JSON-LD files.
@@ -476,17 +506,27 @@ def create_consolidated_round_jsonld(round_output_dir, round_id, config, global_
             "description": "RSV disease projection outputs",
         }}
 
-    consolidated["healthCondition"] = {
-        "@type": "MedicalCondition",
-        "name": "Respiratory Syncytial Virus",
-        "alternateName": "RSV",
-        "code": {
-            "@type": "MedicalCode",
-            "codeValue": "B974",
-            "codingSystem": "ICD-10",
-            "description": "Respiratory syncytial virus as the cause of diseases classified elsewhere"
-        }
-    }
+    # consolidated["healthCondition"] = {
+    #     "@type": "MedicalCondition",
+    #     "name": "Respiratory Syncytial Virus",
+    #     "alternateName": "RSV",
+    #     "code": {
+    #         "@type": "MedicalCode",
+    #         "codeValue": "B974",
+    #         "codingSystem": "ICD-10",
+    #         "description": "Respiratory syncytial virus as the cause of diseases classified elsewhere"
+    #     }
+    # }
+
+    for round_cfg in config.rounds:
+        if round_cfg.round_id == round_id:
+            diseases = round_cfg.diseases
+            for disease in diseases:
+                consolidated["healthCondition"] = {
+                    "@type": "MedicalCondition",
+                    "name": disease.name,
+                    "uri": disease.uri
+                }
 
     consolidated["roundId"] = round_id
 
