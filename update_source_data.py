@@ -6,6 +6,7 @@ import subprocess
 import datetime
 import io
 import sys
+import pandas as pd
 from contextlib import redirect_stdout
 
 from utils.read_confg import read_repos_yaml
@@ -52,12 +53,14 @@ def clone_and_extract_dirs(repo_url, dirs_to_copy, output_dir, ref='main', ref_t
         print(f"✅ Done! Selected directories copied to {output_dir}")
 
 
-def get_github_release_tags(repo_url):
+def get_github_release_tags(repo_url, last_version=True):
     """
     Get a list of release tags from a GitHub repository without cloning.
 
     Parameters:
         repo_url (str): GitHub repo URL (e.g., https://github.com/user/repo.git)
+        last_version (bool): If True, only returns last available version of each tag sharing the
+            same date ids, for tags in a `"YYYY-MM-DD-vX"` format (`"-vX"` optional)
 
     Returns:
         list: A list of release tags
@@ -86,6 +89,18 @@ def get_github_release_tags(repo_url):
                 tag = parts[1].replace('refs/tags/', '')
                 if not tag.endswith('^{}'):  # Skip the peeled tag references
                     tags.append(tag)
+
+        # Select tag of interest
+        if last_version:
+            sel_tags = []
+            for tag in tags:
+                if re.findall("-v", tag):
+                    sel_tag = [tag] + re.split("-v", tag)
+                else:
+                    sel_tag = [tag, tag, '0']
+                sel_tags.append(sel_tag)
+            tag_df = pd.DataFrame(sel_tags).rename(columns={0: 'tag', 1: 'round', 2: 'version'})
+            tags = tag_df.loc[tag_df.groupby(['round'])["version"].idxmax()]["tag"].tolist()
 
         print(f"Found {len(tags)} tags in repository")
         return tags
@@ -126,6 +141,43 @@ def delete_ignored_files_and_directories(directory, ignore_files_regex):
         if os.path.exists(dir_path):  # Check if it still exists (might have been deleted as part of a parent)
             print(f"🗑️ Deleting directory: {dir_path}")
             shutil.rmtree(dir_path)
+
+
+def keep_only_round_files(directory, round_id):
+    """
+    Delete and/or keep only files related to a specific round.
+
+    Parameters:
+        directory (str): Directory to search for files and directories to keep or remove
+        round_id (str): Round ID
+
+    """
+    # Clean Model output folder
+    model_dir = os.path.join(directory, "model-output")
+    for root, dirs, files in os.walk(model_dir):
+        for file in files:
+            if not re.search(round_id, file) and not re.search("README", file):
+                file_path = os.path.join(root, file)
+                print(f" File remove: {file_path}")
+                os.remove(file_path)
+    team_model_round = []
+    for root, dirs, files in os.walk(model_dir):
+        for dir in dirs:
+            dir_path = os.path.join(root, dir)
+            if len(os.listdir(dir_path)) == 0:
+                print(f" Empty folder remove: {dir_path}")
+                os.rmdir(dir_path)
+            else:
+                team_model_round.append(dir)
+    # Clean Metadata folder
+    metadata_dir = os.path.join(directory, "model-metadata")
+    for root, dirs, files in os.walk(metadata_dir):
+        for file in files:
+            team_model = re.split(".yaml|.yml", file)[0]
+            if team_model not in team_model_round + ["README.md"]:
+                file_path = os.path.join(root, file)
+                print(f" File remove: {file_path}")
+                os.remove(file_path)
 
 
 if __name__ == "__main__":
@@ -185,11 +237,16 @@ if __name__ == "__main__":
             for tag in tags:
                 try:
                     # Create tag-specific output directory
-                    tag_output_dir = os.path.join(base_output_dir, tag)
+                    tag_output_dir = os.path.join(base_output_dir, re.split("-v.", tag)[0])
                     os.makedirs(tag_output_dir, exist_ok=True)
+                    round_id = re.split("-v.", tag)[0]
 
                     print(f"\n🏷️ Processing tag: {tag}")
                     clone_and_extract_dirs(repo_url, directories, tag_output_dir, tag, 'tag')
+                    print(f"Cleaning Round: {round_id}")
+                    round_dir = os.path.join(base_output_dir, round_id)
+                    keep_only_round_files(round_dir, round_id)
+
                 except Exception as e:
                     print(f"❌ Error processing tag {tag} for repository {repo_url}: {e}")
 

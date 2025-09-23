@@ -207,33 +207,44 @@ def yaml_to_jsonld(yaml_file_path):
         data = yaml.safe_load(file)
 
     # Create the basic JSON-LD structure
+    if len(data.get("team_abbr")) > 0:
+        team_name = data.get("team_abbr") + "-" + data.get("model_abbr")
+    else:
+        team_name = data.get("model_abbr")
     jsonld = {
         "@context": "https://schema.org/",
         "@type": "Dataset",
-        "name": data.get("model_name"),
-        "alternateName": data.get("model_abbr"),
+        "name": team_name,
+        ##"alternateName": data.get("model_abbr"),
         "description": data.get("methods_long") or data.get("methods"),
         "version": data.get("model_version"),
         "license": data.get("license"),
 
         # Add RSV disease information
 
+        "version": data.get("model_version")
+             # Add RSV disease information
     }
 
-    # Add the organization (team)
-    if data.get("team_name"):
-        jsonld["producer"] = {
-            "@type": "Organization",
-            "name": data.get("team_name"),
-            "alternateName": data.get("team_abbr"),
-            "url": data.get("website_url")
-        }
+    missing_val = ["NA", "na", "TBD", "N/A", "NaN"]
 
-        if data.get("team_funding"):
-            jsonld["producer"]["funder"] = {
-                "@type": "Organization",
-                "description": data.get("team_funding")
-            }
+    if data.get("license") not in missing_val:
+        jsonld["license"] = data.get("license")
+
+    if data.get("website_url") not in missing_val:
+        jsonld["website"] = data.get("website_url")
+
+     # Add the organization (team)
+    jsonld["producer"] = {
+        "@type": "Organization",
+        "name": data.get("team_name")
+    }
+
+    if data.get("team_funding") and data.get("team_funding") not in missing_val:
+        jsonld["producer"]["funder"] = {
+            "@type": "Organization",
+            "description": data.get("team_funding")
+        }
 
     # Add contributors as authors
     if "model_contributors" in data and data["model_contributors"]:

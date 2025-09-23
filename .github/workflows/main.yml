@@ -1,0 +1,50 @@
+name: Generate RSV Forecasting Data
+
+on:
+  # Run weekly on Monday at 00:00 UTC
+  schedule:
+    - cron: '0 0 * * 1'
+  
+  # Allow manual triggers
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Download source data
+      run: python update_source_data.py
+      
+    - name: Generate JSON-LD files
+      run: python create_jsonld.py
+        
+    - name: Get current date
+      id: date
+      run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+      
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: release-${{ steps.date.outputs.date }}
+        name: RSV Forecasting Data Release ${{ steps.date.outputs.date }}
+        files: output/round_*.jsonld
+        body: |
+          RSV Forecasting Hub data release generated on ${{ steps.date.outputs.date }}
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
