@@ -2,8 +2,15 @@ import os
 import pandas as pd
 import pyarrow.parquet as pq
 from tabulate import tabulate  # Optional for prettier display
+import json
+import datetime
 
 from utils.lookup import get_location_from_fips
+
+def serialize_for_json(obj):
+    if isinstance(obj, (datetime.date, datetime.datetime)):
+        return obj.isoformat()
+    return obj
 
 
 def get_parquet_files_for_model(round_id, directory="data/model-output", model=None):
@@ -121,7 +128,7 @@ def view_parquet_files(directory="data/model-output", column="location", limit=1
             print(f"Error processing file: {str(e)}")
 
 
-def get_distinct_field_values(round_id, fields, model, directory):
+def get_distinct_field_values(round_id, model, directory, reset_cache):
     """
     Extract distinct values for specified fields from parquet files.
 
@@ -136,21 +143,20 @@ def get_distinct_field_values(round_id, fields, model, directory):
     # Get the parquet files for the model
     dir = os.path.join(directory, round_id, "model-output")
     parquet_files = get_parquet_files_for_model(round_id, dir, model)
-
     if not parquet_files:
-        return {field: [] for field in fields}
-
-    # Dictionary to store all values for each field
-    field_data = {field: [] for field in fields}
+        return {}
 
     # Process each file
     for file_info in parquet_files:
         file_path = file_info['path']
-
+        result = {}
         try:
+            print("Reading file:", file_path)
             # Check which fields exist in this file
             schema = pq.read_schema(file_path)
-            existing_fields = [field for field in fields if field in schema.names]
+            field_data = {field: [] for field in schema.names}
+            existing_fields = [field for field in schema.names]
+            print ("\tExisting fields:", existing_fields)
 
             if not existing_fields:
                 continue
@@ -161,26 +167,11 @@ def get_distinct_field_values(round_id, fields, model, directory):
 
             # Extract data for each field
             for field in existing_fields:
-                field_data[field].extend(df[field].dropna().tolist())
+                if field != 'value':
+                    result[field] = df[field].dropna().drop_duplicates().tolist()
 
         except Exception as e:
             print(f"Error processing file {file_path}: {str(e)}")
-
-    # Get distinct values
-    result = {}
-    for field, values in field_data.items():
-        try:
-            # Try to use set for fast uniqueness if possible
-            unique_values = list(set(values))
-            try:
-                unique_values.sort()  # Sort if possible
-            except (TypeError, ValueError):
-                pass  # Skip sorting if not possible
-        except TypeError:
-            # Fallback for unhashable types
-            unique_values = pd.Series(values).drop_duplicates().tolist()
-
-        result[field] = unique_values
 
     return result
 

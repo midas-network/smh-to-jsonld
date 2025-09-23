@@ -8,7 +8,7 @@ import pandas as pd
 import yaml
 import json
 
-from utils.output_parse import get_output_file_types
+from utils.output_parse import get_distinct_field_values, get_output_file_types
 from utils.tasks_json_parser import read_tasks_config
 from utils.lookup import get_location_from_fips, STATE_FIPS
 
@@ -52,9 +52,9 @@ def get_origin_date_from_tasks_json(round_id, config):
     return None  # Return None if no origin date is found
 
 
-def calculate_temporal_coverage(round_id, config):
-    origin_dates = get_distinct_task_from_tasks_json(round_id, "origin_date", config)
-    horizons = get_distinct_task_from_tasks_json(round_id, "horizon", config, sort=False)
+def calculate_temporal_coverage(round_id, config, global_field_values_dict):
+    origin_dates = get_distinct_task_from_tasks_json(round_id, "origin_date", config, global_field_values_dict)
+    horizons = get_distinct_task_from_tasks_json(round_id, "horizon", config, global_field_values_dict, sort=False)
     # cast horizons to int
     horizons = [int(horizon) for horizon in horizons]
     # Calculate temporal coverage, origin_date - 1 + horizon * 7
@@ -76,7 +76,7 @@ def calculate_temporal_coverage(round_id, config):
     return temporal_coverage
 
 
-def get_distinct_task_from_tasks_json(round_id, task_name, config, sort=True):
+def get_distinct_task_from_tasks_json(round_id, task_name, config, global_field_values_dict, sort=True):
     """
     Extract all unique location values (both required and optional) from tasks.json.
 
@@ -86,7 +86,7 @@ def get_distinct_task_from_tasks_json(round_id, task_name, config, sort=True):
     Returns:
         list: A sorted list of unique location codes
     """
-    locations = set()
+    task_values = set()
 
     for round_config in config.get_all_rounds():
         config_round_id = round_config.round_id
@@ -97,17 +97,24 @@ def get_distinct_task_from_tasks_json(round_id, task_name, config, sort=True):
                     # Add required locations if they exist
 
                     if task.task_ids[task_name].required is not None:
-                        for loc in task.task_ids[task_name].required:
-                            locations.add(str(loc))
+                        for task_value in task.task_ids[task_name].required:
+                            if task_value in global_field_values_dict[task_name]:
+                                task_values.add(str(task_value))
+                            else:
+                                print("Skipping required" + task_name + " not in global field values:", task_value)
 
                     # Add optional locations if they exist
                     if task.task_ids[task_name].optional is not None:
-                        for loc in task.task_ids[task_name].optional:
-                            locations.add(str(loc))
-    if sort:
-        return sorted(list(locations))
-    else:
-        return list(locations)
+                        for task_value in task.task_ids[task_name].optional:
+                            if task_value in global_field_values_dict[task_name]:
+                                task_values.add(str(task_value))
+                            else:
+                                print("Skipping optional " + task_name + " not in global field values:", task_value)
+            if sort:
+                return sorted(list(task_values))
+            else:
+                return list(task_values)
+    return []
 
 
 def setup_logging(data_dir="data"):
@@ -209,7 +216,6 @@ def yaml_to_jsonld(yaml_file_path):
         "version": data.get("model_version"),
         "license": data.get("license"),
 
-
         # Add RSV disease information
 
     }
@@ -285,41 +291,53 @@ def get_target_metadata_from_tasks(config, round_id):
     return target_metadata
 
 
-def get_targets_from_tasks_json(config, round_id):
+def get_targets_from_tasks_json(config, round_id, global_field_values_dict):
     target_metadata_dict = get_target_metadata_from_tasks(config, round_id)
 
     target_obj_list = []
     for target in target_metadata_dict:
-        # Get rich metadata from tasks.json
-        target_md = target_metadata_dict.get(target, None)
+        if target in (global_field_values_dict['target']) and len(global_field_values_dict['target']) > 1:
+            # Get rich metadata from tasks.json
+            target_md = target_metadata_dict.get(target, None)
 
-        target_obj = {
-            "@type": "PropertyValue",
-            "name": target_md.target_name if target_md and hasattr(target_md, "target_name") else target
-        }
+            target_obj = {
+                "@type": "PropertyValue",
+                "name": target_md.target_name if target_md and hasattr(target_md, "target_name") else target
+            }
 
-        # Add URI if available - this is the key part for including the URI
-        if target_md and hasattr(target_md, "uri") and target_md.uri:
-            target_obj["identifier"] = target_md.uri
+            # Add URI if available - this is the key part for including the URI
+            if target_md and hasattr(target_md, "uri") and target_md.uri:
+                target_obj["identifier"] = target_md.uri
 
-        # Add alternative name if available
-        if target_md and hasattr(target_md, "alternative_name") and target_md.alternative_name:
-            target_obj["alternateName"] = target_md.alternative_name
+            # Add alternative name if available
+            if target_md and hasattr(target_md, "alternative_name") and target_md.alternative_name:
+                target_obj["alternateName"] = target_md.alternative_name
 
-        # Add description
-        if target_md and hasattr(target_md, "description") and target_md.description:
-            target_obj["description"] = target_md.description
+            # Add description
+            if target_md and hasattr(target_md, "description") and target_md.description:
+                target_obj["description"] = target_md.description
 
-        # Add units
-        if target_md and hasattr(target_md, "target_units") and target_md.target_units:
-            target_obj["unitText"] = target_md.target_units
+            # Add units
+            if target_md and hasattr(target_md, "target_units") and target_md.target_units:
+                target_obj["unitText"] = target_md.target_units
 
-        # Add time unit if step-ahead target
-        if target_md and hasattr(target_md, "is_step_ahead") and target_md.is_step_ahead:
-            if hasattr(target_md, "time_unit"):
-                target_obj["temporalUnit"] = target_md.time_unit
+            if target_md and hasattr(target_md, "target_id") and target_md.target_id:
+                target_obj["target_id"] = target_md.target_id
 
-        target_obj_list.append(target_obj)
+            if target_md and hasattr(target_md, "target_type") and target_md.target_type:
+                target_obj["target_type"] = target_md.target_type
+
+            if target_md and hasattr(target_md, "target_keys") and target_md.target_keys:
+                target_obj["target_keys"] = target_md.target_keys
+
+            # Add time unit if step-ahead target
+            if target_md and hasattr(target_md, "is_step_ahead") and target_md.is_step_ahead:
+                if hasattr(target_md, "time_unit"):
+                    target_obj["temporalUnit"] = target_md.time_unit
+
+            target_obj_list.append(target_obj)
+        else:
+            print("Skipping target metadata for target:", target)
 
     return target_obj_list
 
@@ -336,7 +354,7 @@ def process_metadata_for_round(round_id, metadata_dir, output_dir, config):
 
     # Read tasks.json configuration
     # Get locations from tasks.json instead of from output files
-
+    global_field_values_dict = {}
     results = []
     for yaml_file in yaml_files:
         model_name = os.path.splitext(yaml_file)[0]
@@ -369,14 +387,14 @@ def process_metadata_for_round(round_id, metadata_dir, output_dir, config):
         # After processing targets, add this code to process locations
 
         # After processing targets and locations, add file format information
-        file_types = get_output_file_types(round_id, model_name, directory=os.path.join("data", round_id, "model-output", model_name))
+        file_types = get_output_file_types(round_id, model_name,
+                                           directory=os.path.join("data", round_id, "model-output", model_name))
         if file_types:
-            logging.info(f"Found {len(file_types)} file types for {model_name}")
+            logging.info(f"Found {len(file_types)} files for {model_name}")
 
             # Add file format information to workExample
             if "workExample" in jsonld_data:
                 jsonld_data["workExample"]["encodingFormat"] = []
-
 
                 if file_types["parquet"] > 0:
                     jsonld_data["workExample"]["encodingFormat"].append({
@@ -384,12 +402,20 @@ def process_metadata_for_round(round_id, metadata_dir, output_dir, config):
                         "name": "Apache Parquet",
                         "fileExtension": ".parquet"
                     })
-                    # Add other file types as needed
-
-        # Add after processing locations and file types
-
-        # Add Apollo-SV Forecast type
-
+        # if directory exists
+        if os.path.exists(os.path.join("data", round_id, "model-output", model_name)):
+            distinct_field_values_for_this_model = \
+                (get_distinct_field_values(round_id, model_name, directory="data", reset_cache=True))
+            # For each field in the model's distinct values
+            for field, values in distinct_field_values_for_this_model.items():
+                # If field doesn't exist in global dict yet, initialize it
+                if field not in global_field_values_dict:
+                    global_field_values_dict[field] = values
+                # If field exists, append only new values
+                else:
+                    for value in values:
+                        if value not in global_field_values_dict[field]:
+                            global_field_values_dict[field].append(value)
 
         # Write output directly to the output directory, not in a nested round_id directory
         os.makedirs(output_dir, exist_ok=True)
@@ -406,10 +432,10 @@ def process_metadata_for_round(round_id, metadata_dir, output_dir, config):
             'round_id': round_id
         })
 
-    return results
+    return (results, global_field_values_dict)
 
 
-def create_consolidated_round_jsonld(round_output_dir, round_id, config):
+def create_consolidated_round_jsonld(round_output_dir, round_id, config, global_field_values_dict):
     """
     Create a consolidated JSON-LD file for the entire round that includes data from all model JSON-LD files.
 
@@ -431,7 +457,11 @@ def create_consolidated_round_jsonld(round_output_dir, round_id, config):
                     "name": f"Round {round_id} Scenario Projection Models Collection",
                     "description": f"Collection of model output from round {round_id}", "identifier": round_id,
                     "hasPart": [], "workExample": {
-            "@type": "Dataset",
+            "@type": [
+                "Dataset",
+                "https://midasnetwork.us/ontology/class-datasetsmidas97.html",  # Model output
+                "https://midasnetwork.us/ontology/class-oboobcs_0000267.html"  # Scenario analysis
+            ],
             "description": "RSV disease projection outputs",
         }}
 
@@ -448,9 +478,8 @@ def create_consolidated_round_jsonld(round_output_dir, round_id, config):
     }
 
     consolidated["roundId"] = round_id
-    consolidated["additionalType"] = "apollo:APOLLO_SV_00000557"  # Infection count prediction
 
-    target_obj_list = get_targets_from_tasks_json(config, round_id)
+    target_obj_list = get_targets_from_tasks_json(config, round_id, global_field_values_dict)
     for target_obj in target_obj_list:
         if "variableMeasured" not in consolidated["workExample"]:
             consolidated["workExample"]["variableMeasured"] = [target_obj]
@@ -473,7 +502,7 @@ def create_consolidated_round_jsonld(round_output_dir, round_id, config):
         unique_output_types = [json.loads(s) for s in unique_output_types_str]
         consolidated["workExample"]["output_type"] = unique_output_types
 
-    locations = get_distinct_task_from_tasks_json(round_id, "location", config)
+    locations = get_distinct_task_from_tasks_json(round_id, "location", config, global_field_values_dict)
 
     # Add spatial coverage to workExample
     if "workExample" in consolidated:
@@ -486,11 +515,11 @@ def create_consolidated_round_jsonld(round_output_dir, round_id, config):
             logging.debug(f"Added location info for FIPS {location_fips}")
 
         # Add age groups to workExample
-    age_groups = get_distinct_task_from_tasks_json(round_id, "age_group", config)
+    age_groups = get_distinct_task_from_tasks_json(round_id, "age_group", config, global_field_values_dict)
     if age_groups:
         consolidated["workExample"]["ageGroups"] = age_groups
 
-    temporal_coverage = calculate_temporal_coverage(round_id, config)
+    temporal_coverage = calculate_temporal_coverage(round_id, config, global_field_values_dict)
 
     # Add temporal coverage to workExample
     if "workExample" in consolidated:
@@ -575,14 +604,17 @@ def process_all_metadata(base_dir="data", metadata_subdir="model-metadata", outp
             logging.info(f"Processing round ID: {round_id} from directory: {round_dir}")
 
             # Process metadata for this round and save to the round-specific output directory
-            round_results = process_metadata_for_round(round_id, metadata_dir_full, round_output_dir, config)
+            res = process_metadata_for_round(round_id, metadata_dir_full, round_output_dir, config)
+            round_results = res[0]
+            global_field_values_dict = res[1]
+
             results.extend(round_results)
 
             logging.info(
                 f"Completed processing round {round_id} from directory {round_dir}: {len(round_results)} models processed")
 
             # Create consolidated JSON-LD for the round
-        create_consolidated_round_jsonld(round_output_dir, round_id, config)
+        create_consolidated_round_jsonld(round_output_dir, round_id, config, global_field_values_dict)
 
     logging.info(f"Successfully processed {len(results)} models across all rounds.")
     return results
