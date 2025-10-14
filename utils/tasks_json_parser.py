@@ -40,6 +40,11 @@ class ModelTask:
     output_type: Dict[str, OutputTypeConfig]
     target_metadata: List[TargetMetadata]
 
+@dataclass
+class Disease:
+    """Represents a disease with name and URI."""
+    name: str
+    uri: str
 
 @dataclass
 class Round:
@@ -48,6 +53,8 @@ class Round:
     round_id_from_variable: bool
     model_tasks: List[ModelTask]
     submissions_due: Dict[str, str]
+    diseases: List[Disease]  # New field for disease information
+
 
 
 class TasksConfig:
@@ -74,6 +81,14 @@ class TasksConfig:
             # Parse rounds
             for round_data in data.get("rounds", []):
                 model_tasks = []
+
+                # Parse diseases
+                diseases = []
+                for disease_data in round_data.get("disease", []):
+                    diseases.append(Disease(
+                        name=disease_data.get("name"),
+                        uri=disease_data.get("uri")
+                    ))
 
                 # Parse model tasks
                 for task_data in round_data.get("model_tasks", []):
@@ -119,6 +134,7 @@ class TasksConfig:
                 round_dict["round_id"] = None
                 round_dict["model_tasks"] = model_tasks
                 round_dict["submissions_due"] = round_data.get("submissions_due", {})
+                round_dict["diseases"] = diseases
 
                 round_dict["round_id_from_variable"] = round_data.get("round_id_from_variable")
 
@@ -142,6 +158,7 @@ class TasksConfig:
                     round_id=round_dict["round_id"],
                     round_id_from_variable=round_dict["round_id_from_variable"],
                     model_tasks=model_tasks,
+                    diseases=diseases,
                     submissions_due=round_dict["submissions_due"]
                 ))
 
