@@ -76,7 +76,7 @@ def calculate_temporal_coverage(round_id, config, global_field_values_dict):
     return temporal_coverage
 
 
-def get_distinct_task_from_tasks_json(round_id, task_name, config, global_field_values_dict, sort=True):
+def get_distinct_task_from_tasks_json(round_id, task_name, config, field_values, sort=True):
     """
     Extract all unique location values (both required and optional) from tasks.json.
 
@@ -98,7 +98,7 @@ def get_distinct_task_from_tasks_json(round_id, task_name, config, global_field_
 
                     if task.task_ids[task_name].required is not None:
                         for task_value in task.task_ids[task_name].required:
-                            if task_value in global_field_values_dict[task_name]:
+                            if task_value in field_values[task_name]:
                                 task_values.add(str(task_value))
                             else:
                                 print("Skipping required" + task_name + " not in global field values:", task_value)
@@ -106,7 +106,7 @@ def get_distinct_task_from_tasks_json(round_id, task_name, config, global_field_
                     # Add optional locations if they exist
                     if task.task_ids[task_name].optional is not None:
                         for task_value in task.task_ids[task_name].optional:
-                            if task_value in global_field_values_dict[task_name]:
+                            if task_value in field_values[task_name]:
                                 task_values.add(str(task_value))
                             else:
                                 print("Skipping optional " + task_name + " not in global field values:", task_value)
@@ -302,12 +302,12 @@ def get_target_metadata_from_tasks(config, round_id):
     return target_metadata
 
 
-def get_targets_from_tasks_json(config, round_id, global_field_values_dict):
+def get_targets_from_tasks_json_given_model(config, round_id, field_values_by_model):
     target_metadata_dict = get_target_metadata_from_tasks(config, round_id)
 
     target_obj_list = []
     for target in target_metadata_dict:
-        if target in (global_field_values_dict['target']) and len(global_field_values_dict['target']) > 1:
+        if target in (field_values_by_model['target']) and len(field_values_by_model['target']) > 0:
             # Get rich metadata from tasks.json
             target_md = target_metadata_dict.get(target, None)
 
@@ -363,11 +363,29 @@ def process_metadata_for_round(round_id, metadata_dir, output_dir, config):
 
     logging.info(f"Found {len(yaml_files)} YAML files to process")
 
+    round_config = config.get_round_by_id(round_id)
+
+    output_types = []
+    for task in round_config.model_tasks:
+        for output_type_name, output_type_config in task.output_type.items():
+            # Create a serializable representation
+            output_types.append({
+                "type": output_type_name,
+                "output_type_id": output_type_config.output_type_id,
+                "value": output_type_config.value
+            })
+    # Remove duplicates
+    unique_output_types_str = {json.dumps(d, sort_keys=False) for d in output_types}
+    unique_output_types = [json.loads(s) for s in unique_output_types_str]
+
+
     # Read tasks.json configuration
     # Get locations from tasks.json instead of from output files
     global_field_values_dict = {}
+    field_values_by_model = {}
     results = []
     for yaml_file in yaml_files:
+        output_types = []
         model_name = os.path.splitext(yaml_file)[0]
         yaml_path = os.path.join(metadata_dir, yaml_file)
 
@@ -417,6 +435,7 @@ def process_metadata_for_round(round_id, metadata_dir, output_dir, config):
         if os.path.exists(os.path.join("data", round_id, "model-output", model_name)):
             distinct_field_values_for_this_model = \
                 (get_distinct_field_values(round_id, model_name, directory="data", reset_cache=True))
+            field_values_by_model[model_name] = distinct_field_values_for_this_model
             # For each field in the model's distinct values
             for field, values in distinct_field_values_for_this_model.items():
                 # If field doesn't exist in global dict yet, initialize it
@@ -427,6 +446,70 @@ def process_metadata_for_round(round_id, metadata_dir, output_dir, config):
                     for value in values:
                         if value not in global_field_values_dict[field]:
                             global_field_values_dict[field].append(value)
+
+            # Filter unique_output_types to only those used by this model
+            used_output_types = distinct_field_values_for_this_model.get("output_type", [])
+            for output_type in used_output_types:
+                for global_output_type in unique_output_types:
+                    if output_type == global_output_type["type"]:
+                        if output_type == "sample":
+                            output_types.append(global_output_type)
+                        else:
+                            required = global_output_type.get("output_type_id", {}).get("required", [])
+                            model_ids = distinct_field_values_for_this_model.get("output_type_id", [])
+
+                            # normalize to strings and use sets for fast membership/difference
+                            req_set = {str(x) for x in required}
+                            id_set = {str(x) for x in model_ids}
+
+                            missing = req_set - id_set
+                            all_present = not missing
+
+                            if all_present:
+                                output_types.append(global_output_type)
+                            else:
+                                print("Missing required output_type_id values:", sorted(missing))
+
+
+
+            jsonld_data["workExample"]["output_type"] = output_types
+
+            target_obj_list = get_targets_from_tasks_json_given_model(config, round_id, distinct_field_values_for_this_model)
+            for target_obj in target_obj_list:
+                if "variableMeasured" not in jsonld_data["workExample"]:
+                    jsonld_data["workExample"]["variableMeasured"] = [target_obj]
+                else:
+                    jsonld_data["workExample"]["variableMeasured"].append(target_obj)
+
+            locations = get_distinct_task_from_tasks_json(round_id, "location", config, distinct_field_values_for_this_model)
+
+            # Add spatial coverage to workExample
+            if "workExample" in jsonld_data:
+                jsonld_data["workExample"]["spatialCoverage"] = []
+
+            for location_fips in locations:
+                location_info = get_location_info(location_fips)
+                if location_info:
+                    jsonld_data["workExample"]["spatialCoverage"].append(location_info)
+                    logging.debug(f"Added location info for FIPS {location_fips}")
+
+                # Add age groups to workExample
+            age_groups = get_distinct_task_from_tasks_json(round_id, "age_group", config, distinct_field_values_for_this_model)
+            if age_groups:
+                jsonld_data["workExample"]["ageGroups"] = age_groups
+
+            temporal_coverage = calculate_temporal_coverage(round_id, config, distinct_field_values_for_this_model)
+
+            # Add temporal coverage to workExample
+            if "workExample" in jsonld_data:
+                # Assuming temporal_coverage returns start/end dates
+                if "startDate" in temporal_coverage and "endDate" in temporal_coverage:
+                    jsonld_data["workExample"]["temporalCoverage"] = (
+                        f"{temporal_coverage['startDate']}/{temporal_coverage['endDate']}"
+                    )
+                # Or if it returns an ISO 8601 time interval directly
+                elif "interval" in temporal_coverage:
+                    jsonld_data["workExample"]["temporalCoverage"] = temporal_coverage["interval"]
 
         # Write output directly to the output directory, not in a nested round_id directory
         os.makedirs(output_dir, exist_ok=True)
@@ -443,7 +526,7 @@ def process_metadata_for_round(round_id, metadata_dir, output_dir, config):
             'round_id': round_id
         })
 
-    return (results, global_field_values_dict)
+    return (results, global_field_values_dict, field_values_by_model)
 
 
 def get_diseases_by_round(tasks_json_path):
@@ -476,7 +559,7 @@ def get_diseases_by_round(tasks_json_path):
     return diseases_by_round
 
 
-def create_consolidated_round_jsonld(round_output_dir, round_id, config, global_field_values_dict):
+def create_consolidated_round_jsonld(round_output_dir, round_id, config, global_field_values_dict, field_values_by_model):
     """
     Create a consolidated JSON-LD file for the entire round that includes data from all model JSON-LD files.
 
@@ -506,18 +589,6 @@ def create_consolidated_round_jsonld(round_output_dir, round_id, config, global_
             "description": "RSV disease projection outputs",
         }}
 
-    # consolidated["healthCondition"] = {
-    #     "@type": "MedicalCondition",
-    #     "name": "Respiratory Syncytial Virus",
-    #     "alternateName": "RSV",
-    #     "code": {
-    #         "@type": "MedicalCode",
-    #         "codeValue": "B974",
-    #         "codingSystem": "ICD-10",
-    #         "description": "Respiratory syncytial virus as the cause of diseases classified elsewhere"
-    #     }
-    # }
-
     for round_cfg in config.rounds:
         if round_cfg.round_id == round_id:
             diseases = round_cfg.diseases
@@ -530,58 +601,11 @@ def create_consolidated_round_jsonld(round_output_dir, round_id, config, global_
 
     consolidated["roundId"] = round_id
 
-    target_obj_list = get_targets_from_tasks_json(config, round_id, global_field_values_dict)
-    for target_obj in target_obj_list:
-        if "variableMeasured" not in consolidated["workExample"]:
-            consolidated["workExample"]["variableMeasured"] = [target_obj]
-        else:
-            consolidated["workExample"]["variableMeasured"].append(target_obj)
 
-    round_config = config.get_round_by_id(round_id)
-    if round_config:
-        output_types = []
-        for task in round_config.model_tasks:
-            for output_type_name, output_type_config in task.output_type.items():
-                # Create a serializable representation
-                output_types.append({
-                    "type": output_type_name,
-                    "output_type_id": output_type_config.output_type_id,
-                    "value": output_type_config.value
-                })
-        # Remove duplicates
-        unique_output_types_str = {json.dumps(d, sort_keys=False) for d in output_types}
-        unique_output_types = [json.loads(s) for s in unique_output_types_str]
-        consolidated["workExample"]["output_type"] = unique_output_types
 
-    locations = get_distinct_task_from_tasks_json(round_id, "location", config, global_field_values_dict)
 
-    # Add spatial coverage to workExample
-    if "workExample" in consolidated:
-        consolidated["workExample"]["spatialCoverage"] = []
 
-    for location_fips in locations:
-        location_info = get_location_info(location_fips)
-        if location_info:
-            consolidated["workExample"]["spatialCoverage"].append(location_info)
-            logging.debug(f"Added location info for FIPS {location_fips}")
 
-        # Add age groups to workExample
-    age_groups = get_distinct_task_from_tasks_json(round_id, "age_group", config, global_field_values_dict)
-    if age_groups:
-        consolidated["workExample"]["ageGroups"] = age_groups
-
-    temporal_coverage = calculate_temporal_coverage(round_id, config, global_field_values_dict)
-
-    # Add temporal coverage to workExample
-    if "workExample" in consolidated:
-        # Assuming temporal_coverage returns start/end dates
-        if "startDate" in temporal_coverage and "endDate" in temporal_coverage:
-            consolidated["workExample"]["temporalCoverage"] = (
-                f"{temporal_coverage['startDate']}/{temporal_coverage['endDate']}"
-            )
-        # Or if it returns an ISO 8601 time interval directly
-        elif "interval" in temporal_coverage:
-            consolidated["workExample"]["temporalCoverage"] = temporal_coverage["interval"]
 
     # Collect model data
     for jsonld_file in jsonld_files:
@@ -655,9 +679,10 @@ def process_all_metadata(base_dir="data", metadata_subdir="model-metadata", outp
             logging.info(f"Processing round ID: {round_id} from directory: {round_dir}")
 
             # Process metadata for this round and save to the round-specific output directory
-            res = process_metadata_for_round(round_id, metadata_dir_full, round_output_dir, config)
-            round_results = res[0]
-            global_field_values_dict = res[1]
+            round_results, global_field_values_dict, field_values_by_model = process_metadata_for_round(round_id,
+                                                                                                        metadata_dir_full,
+                                                                                                        round_output_dir,
+                                                                                                        config)
 
             results.extend(round_results)
 
@@ -665,7 +690,7 @@ def process_all_metadata(base_dir="data", metadata_subdir="model-metadata", outp
                 f"Completed processing round {round_id} from directory {round_dir}: {len(round_results)} models processed")
 
             # Create consolidated JSON-LD for the round
-        create_consolidated_round_jsonld(round_output_dir, round_id, config, global_field_values_dict)
+        create_consolidated_round_jsonld(round_output_dir, round_id, config, global_field_values_dict, field_values_by_model)
 
     logging.info(f"Successfully processed {len(results)} models across all rounds.")
     return results

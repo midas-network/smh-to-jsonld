@@ -1,0 +1,59 @@
+name,fips,iso3166_2,geoname_url
+Alabama,01,US-AL,https://www.geonames.org/4829764/
+Alaska,02,US-AK,https://www.geonames.org/5879092/
+Arizona,04,US-AZ,https://www.geonames.org/5551752/
+Arkansas,05,US-AR,https://www.geonames.org/4099753/
+California,06,US-CA,https://www.geonames.org/5332921/
+Colorado,08,US-CO,https://www.geonames.org/5417618/
+Connecticut,09,US-CT,https://www.geonames.org/4831725/
+Delaware,10,US-DE,https://www.geonames.org/4142224/
+District of Columbia,11,US-DC,https://www.geonames.org/4138106/
+Florida,12,US-FL,https://www.geonames.org/4155751/
+Georgia,13,US-GA,https://www.geonames.org/4197000/
+Hawaii,15,US-HI,https://www.geonames.org/5855797/
+Idaho,16,US-ID,https://www.geonames.org/5596512/
+Illinois,17,US-IL,https://www.geonames.org/4896861/
+Indiana,18,US-IN,https://www.geonames.org/4921868/
+Iowa,19,US-IA,https://www.geonames.org/4862182/
+Kansas,20,US-KS,https://www.geonames.org/4273857/
+Kentucky,21,US-KY,https://www.geonames.org/6254925/
+Louisiana,22,US-LA,https://www.geonames.org/4331987/
+Maine,23,US-ME,https://www.geonames.org/4971068/
+Maryland,24,US-MD,https://www.geonames.org/4361885/
+Massachusetts,25,US-MA,https://www.geonames.org/6254926/
+Michigan,26,US-MI,https://www.geonames.org/5001836/
+Minnesota,27,US-MN,https://www.geonames.org/5037779/
+Mississippi,28,US-MS,https://www.geonames.org/4436296/
+Missouri,29,US-MO,https://www.geonames.org/4398678/
+Montana,30,US-MT,https://www.geonames.org/5667009/
+Nebraska,31,US-NE,https://www.geonames.org/5073708/
+Nevada,32,US-NV,https://www.geonames.org/5509151/
+New Hampshire,33,US-NH,https://www.geonames.org/5090174/
+New Jersey,34,US-NJ,https://www.geonames.org/5101760/
+New Mexico,35,US-NM,https://www.geonames.org/5481136/
+New York,36,US-NY,https://www.geonames.org/5128638/
+North Carolina,37,US-NC,https://www.geonames.org/4482348/
+North Dakota,38,US-ND,https://www.geonames.org/5690763/
+Ohio,39,US-OH,https://www.geonames.org/5165418/
+Oklahoma,40,US-OK,https://www.geonames.org/4544379/
+Oregon,41,US-OR,https://www.geonames.org/5744337/
+Pennsylvania,42,US-PA,https://www.geonames.org/6254927/
+Rhode Island,44,US-RI,https://www.geonames.org/5224323/
+South Carolina,45,US-SC,https://www.geonames.org/4597040/
+South Dakota,46,US-SD,https://www.geonames.org/5769223/
+Tennessee,47,US-TN,https://www.geonames.org/4662168/
+Texas,48,US-TX,https://www.geonames.org/4736286/
+Utah,49,US-UT,https://www.geonames.org/5549030/
+Vermont,50,US-VT,https://www.geonames.org/5242283/
+Virginia,51,US-VA,https://www.geonames.org/6254928/
+Washington,53,US-WA,https://www.geonames.org/5815135/
+West Virginia,54,US-WV,https://www.geonames.org/4826850/
+Wisconsin,55,US-WI,https://www.geonames.org/5279468/
+Wyoming,56,US-WY,https://www.geonames.org/5843591/
+American Samoa,60,US-AS,https://www.geonames.org/5880801/
+Guam,66,US-GU,https://www.geonames.org/4043988/
+Northern Mariana Islands,69,US-MP,https://www.geonames.org/4041468/
+Puerto Rico,72,US-PR,https://www.geonames.org/4566966/
+U.S. Minor Outlying Islands,74,US-UM,https://www.geonames.org/5854968/
+U.S. Virgin Islands,78,US-VI,https://www.geonames.org/4796775/
+United States,000,US-US,https://www.geonames.org/6252001/
