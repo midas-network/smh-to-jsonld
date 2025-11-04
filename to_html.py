@@ -71,7 +71,7 @@ def generate_html_head(title):
         .location {{
             display: inline-block;
             margin: 5px;
-            padding: 5px 10px;
+            padding: 0px 5px;
             background: #ffffff;
             border-radius: 3px;
             font-size: 0.9em;
@@ -228,7 +228,8 @@ def generate_variables_measured_section(model):
     if 'workExample' not in model or 'variableMeasured' not in model['workExample']:
         return ''
 
-    html = """        <h3>Variables Measured</h3>
+    label = "Target" if len(model['workExample']['variableMeasured']) == 1 else "Targets"
+    html = f"""        <h3>{label}</h3>
         <div class="variables-grid">
 """
     for variable in model['workExample']['variableMeasured']:
@@ -316,9 +317,12 @@ def generate_temporal_coverage_section(model):
     # Parse the date range (format: "start_date/end_date")
     if '/' in temporal:
         start_date, end_date = temporal.split('/')
-        return f'        <p><strong>Temporal Coverage:</strong> <span class="location">{start_date}</span> to <span class="location">{end_date}</span></p>\n'
+        #remove time if present
+        start_date = start_date.split(' ')[0]
+        end_date = end_date.split(' ')[0]
+        return f'        <p><h3>Temporal Coverage</h3> <span class="location">{start_date}</span> to <span class="location">{end_date}</span></p>\n'
     else:
-        return f'        <p><strong>Temporal Coverage:</strong> <span class="location">{temporal}</span></p>\n'
+        return f'        <p><h3>Temporal Coverage</h3> <span class="location">{temporal}</span></p>\n'
 
 
 def parse_jsonld_to_html(jsonld_file):
@@ -355,9 +359,9 @@ def parse_jsonld_to_html(jsonld_file):
         # License with link
         if license in license_map:
             url = license_map[license]
-            html += f'        <p class="metadata"><strong>License:</strong> <a href="{url}" target="_blank">{license}</a></p>\n'
+            html += f'        <p><strong>License:</strong> <a href="{url}" target="_blank">{license}</a></p>\n'
         else:
-            html += f'        <p class="metadata"><strong>License:</strong> {license}</p>\n'
+            html += f'        <p><strong>License:</strong> {license}</p>\n'
 
         # Target metadata
         html += generate_target_metadata_section(model)
@@ -384,6 +388,10 @@ def parse_jsonld_to_html(jsonld_file):
         if 'description' in model:
             html += f'        <p><strong>Description:</strong> {model["description"]}</p>\n'
 
+        # Data sources
+        if 'isBasedOn' in model:
+            html += f'        <p><strong>Data Sources:</strong> {model["isBasedOn"].get("description", "N/A")}</p>\n'
+
         # Producer
         if 'producer' in model:
             producer = model['producer']
@@ -408,10 +416,6 @@ def parse_jsonld_to_html(jsonld_file):
 
         # Temporal coverage
         html += generate_temporal_coverage_section(model)
-
-        # Data sources
-        if 'isBasedOn' in model:
-            html += f'        <p><strong>Data Sources:</strong> {model["isBasedOn"].get("description", "N/A")}</p>\n'
 
         html += '    </div>\n'
 

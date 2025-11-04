@@ -3,12 +3,13 @@ import re
 import shutil
 import logging
 import sys
+import datetime
 
 import pandas as pd
 import yaml
 import json
 
-from utils.output_parse import get_distinct_field_values, get_output_file_types
+from utils.output_parse import get_distinct_field_values, get_output_file_types, get_hub_schema
 from utils.tasks_json_parser import read_tasks_config
 from utils.lookup import get_location_from_fips, STATE_FIPS
 
@@ -52,9 +53,9 @@ def get_origin_date_from_tasks_json(round_id, config):
     return None  # Return None if no origin date is found
 
 
-def calculate_temporal_coverage(round_id, config, global_field_values_dict):
-    origin_dates = get_distinct_task_from_tasks_json(round_id, "origin_date", config, global_field_values_dict)
-    horizons = get_distinct_task_from_tasks_json(round_id, "horizon", config, global_field_values_dict, sort=False)
+def calculate_temporal_coverage(round_id, config, global_field_values_dict, schema):
+    origin_dates = get_distinct_task_from_tasks_json(round_id, "origin_date", config, global_field_values_dict, schema=schema)
+    horizons = get_distinct_task_from_tasks_json(round_id, "horizon", config, global_field_values_dict, sort=False, schema=schema)
     # cast horizons to int
     horizons = [int(horizon) for horizon in horizons]
     # Calculate temporal coverage, origin_date - 1 + horizon * 7
@@ -76,7 +77,7 @@ def calculate_temporal_coverage(round_id, config, global_field_values_dict):
     return temporal_coverage
 
 
-def get_distinct_task_from_tasks_json(round_id, task_name, config, field_values, sort=True):
+def get_distinct_task_from_tasks_json(round_id, task_name, config, field_values, schema, sort=True):
     """
     Extract all unique location values (both required and optional) from tasks.json.
 
@@ -87,6 +88,8 @@ def get_distinct_task_from_tasks_json(round_id, task_name, config, field_values,
         list: A sorted list of unique location codes
     """
     task_values = set()
+    if task_name == "origin_date":
+        field_values[task_name] = [dt.strftime('%Y-%m-%d') for dt in field_values[task_name]]
 
     for round_config in config.get_all_rounds():
         config_round_id = round_config.round_id
@@ -98,15 +101,16 @@ def get_distinct_task_from_tasks_json(round_id, task_name, config, field_values,
 
                     if task.task_ids[task_name].required is not None:
                         for task_value in task.task_ids[task_name].required:
+
                             if task_value in field_values[task_name]:
                                 task_values.add(str(task_value))
                             else:
-                                print("Skipping required" + task_name + " not in global field values:", task_value)
+                                print("Skipping required " + task_name + " not in global field values:", task_value)
 
                     # Add optional locations if they exist
                     if task.task_ids[task_name].optional is not None:
                         for task_value in task.task_ids[task_name].optional:
-                            if task_value in field_values[task_name]:
+                            if str(task_value) in field_values[task_name]:
                                 task_values.add(str(task_value))
                             else:
                                 print("Skipping optional " + task_name + " not in global field values:", task_value)
@@ -433,8 +437,9 @@ def process_metadata_for_round(round_id, metadata_dir, output_dir, config):
                     })
         # if directory exists
         if os.path.exists(os.path.join("data", round_id, "model-output", model_name)):
+            schema = get_hub_schema(round_id)
             distinct_field_values_for_this_model = \
-                (get_distinct_field_values(round_id, model_name, directory="data", reset_cache=True))
+                (get_distinct_field_values(round_id, model_name, directory="data", schema=schema, reset_cache=True))
             field_values_by_model[model_name] = distinct_field_values_for_this_model
             # For each field in the model's distinct values
             for field, values in distinct_field_values_for_this_model.items():
@@ -481,7 +486,7 @@ def process_metadata_for_round(round_id, metadata_dir, output_dir, config):
                 else:
                     jsonld_data["workExample"]["variableMeasured"].append(target_obj)
 
-            locations = get_distinct_task_from_tasks_json(round_id, "location", config, distinct_field_values_for_this_model)
+            locations = get_distinct_task_from_tasks_json(round_id, "location", config, distinct_field_values_for_this_model, schema=schema)
 
             # Add spatial coverage to workExample
             if "workExample" in jsonld_data:
@@ -494,11 +499,11 @@ def process_metadata_for_round(round_id, metadata_dir, output_dir, config):
                     logging.debug(f"Added location info for FIPS {location_fips}")
 
                 # Add age groups to workExample
-            age_groups = get_distinct_task_from_tasks_json(round_id, "age_group", config, distinct_field_values_for_this_model)
+            age_groups = get_distinct_task_from_tasks_json(round_id, "age_group", config, distinct_field_values_for_this_model, schema=schema)
             if age_groups:
                 jsonld_data["workExample"]["ageGroups"] = age_groups
 
-            temporal_coverage = calculate_temporal_coverage(round_id, config, distinct_field_values_for_this_model)
+            temporal_coverage = calculate_temporal_coverage(round_id, config, distinct_field_values_for_this_model, schema=schema)
 
             # Add temporal coverage to workExample
             if "workExample" in jsonld_data:

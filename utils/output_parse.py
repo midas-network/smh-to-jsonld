@@ -1,8 +1,9 @@
 import os
 import pandas as pd
 import pyarrow.parquet as pq
-from tabulate import tabulate  # Optional for prettier display
-import json
+from tabulate import tabulate
+from hubdata import connect_hub, create_hub_schema
+from pathlib import Path
 import datetime
 
 from utils.lookup import get_location_from_fips
@@ -12,6 +13,11 @@ def serialize_for_json(obj):
         return obj.isoformat()
     return obj
 
+def get_hub_schema(round):
+    hub_connnection = connect_hub(Path('data' + os.sep + round + os.sep))
+    schema = create_hub_schema(hub_connnection.tasks)
+    print(schema)
+    return schema
 
 def get_parquet_files_for_model(round_id, directory="data/model-output", model=None):
     """
@@ -128,7 +134,7 @@ def view_parquet_files(directory="data/model-output", column="location", limit=1
             print(f"Error processing file: {str(e)}")
 
 
-def get_distinct_field_values(round_id, model, directory, reset_cache):
+def get_distinct_field_values(round_id, model, directory, schema, reset_cache):
     """
     Extract distinct values for specified fields from parquet files.
 
@@ -153,7 +159,7 @@ def get_distinct_field_values(round_id, model, directory, reset_cache):
         try:
             print("Reading file:", file_path)
             # Check which fields exist in this file
-            schema = pq.read_schema(file_path)
+            #schema = pq.read_schema(file_path)
             field_data = {field: [] for field in schema.names}
             existing_fields = [field for field in schema.names]
             print ("\tExisting fields:", existing_fields)
@@ -162,7 +168,7 @@ def get_distinct_field_values(round_id, model, directory, reset_cache):
                 continue
 
             # Read only the needed columns
-            table = pq.read_table(file_path, columns=existing_fields)
+            table = pq.read_table(file_path, columns=existing_fields, schema=schema)
             df = table.to_pandas()
 
             # Extract data for each field
