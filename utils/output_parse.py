@@ -14,9 +14,8 @@ def serialize_for_json(obj):
     return obj
 
 def get_hub_schema(round):
-    hub_connnection = connect_hub(Path('data' + os.sep + round + os.sep))
-    schema = create_hub_schema(hub_connnection.tasks)
-    print(schema)
+    hub_connection = connect_hub(Path('data' + os.sep + round + os.sep))
+    schema = create_hub_schema(hub_connection.tasks)
     return schema
 
 def get_parquet_files_for_model(round_id, directory="data/model-output", model=None):

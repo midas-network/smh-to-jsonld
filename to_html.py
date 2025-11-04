@@ -2,6 +2,26 @@ import json
 from pathlib import Path
 import csv
 
+import pandas as pd
+import pyarrow.compute as pc
+from hubdata import connect_hub
+import os
+
+
+def get_first_n_rows_of_output(n, round_id, model):
+    hub_connection = connect_hub(Path('data' + os.sep + round_id + os.sep))
+    hub_ds = hub_connection.get_dataset()
+
+    pa_table = hub_ds.to_table(filter=pc.field('model_id') == model)
+    df = pa_table.to_pandas()
+
+    # Get the first `n` rows and the last row
+    if len(df) > n:
+        df = pd.concat([df.head(n), pd.DataFrame([["..."] * len(df.columns)], columns=df.columns), df.tail(1)])
+
+    html_output = df.to_html(index=False, border=0)
+    return html_output
+
 
 def load_geodata_mapping():
     """Load geodata CSV and create ISO code to Geonames URL mapping."""
@@ -39,6 +59,12 @@ def generate_html_head(title):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{title}</title>
     <style>
+        th {{
+          text-align: left;
+        }}
+        table {{
+          width: 100%;
+        }}
         body {{
             font-family: Arial, sans-serif;
             max-width: 1200px;
@@ -325,7 +351,7 @@ def generate_temporal_coverage_section(model):
         return f'        <p><h3>Temporal Coverage</h3> <span class="location">{temporal}</span></p>\n'
 
 
-def parse_jsonld_to_html(jsonld_file):
+def parse_jsonld_to_html(jsonld_file, round_id):
     """Parse JSON-LD file and generate an HTML webpage."""
 
     # Load necessary data
@@ -348,6 +374,7 @@ def parse_jsonld_to_html(jsonld_file):
     for idx, model in enumerate(models):
         license = model.get('license', 'N/A').upper()
         model_id = f"model-{idx}"
+        parquet_html= get_first_n_rows_of_output(3, round_id, models[idx]["name"])
 
         # Model header
         html += f"""    <div class="model" id="{model_id}">
@@ -417,6 +444,11 @@ def parse_jsonld_to_html(jsonld_file):
         # Temporal coverage
         html += generate_temporal_coverage_section(model)
 
+        # Sample Parquet data
+        html += '        <h3>Sample Output Data</h3>\n'
+        html += f'        {parquet_html}\n'
+
+
         html += '    </div>\n'
 
     # Close HTML
@@ -430,8 +462,9 @@ def parse_jsonld_to_html(jsonld_file):
 # Generate the HTML
 input_file = 'output/round_2024-07-28.jsonld'
 output_file = 'output/round_2024-07-28.html'
+round_id = '2024-07-28'
 
-html_content = parse_jsonld_to_html(input_file)
+html_content = parse_jsonld_to_html(input_file, round_id)
 
 # Write to file
 with open(output_file, 'w', encoding='utf-8') as f:
