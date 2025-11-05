@@ -1,3 +1,4 @@
+import logging
 import os
 import pandas as pd
 import pyarrow.parquet as pq
@@ -5,8 +6,6 @@ from tabulate import tabulate
 from hubdata import connect_hub, create_hub_schema
 from pathlib import Path
 import datetime
-
-from utils.lookup import get_location_from_fips
 
 def serialize_for_json(obj):
     if isinstance(obj, (datetime.date, datetime.datetime)):
@@ -29,8 +28,9 @@ def get_parquet_files_for_model(round_id, directory="data/model-output", model=N
     Returns:
         list: List of dictionaries containing path, model name, and filename
     """
+   
     if not os.path.isdir(directory):
-        print(f"Directory '{directory}' not found.")
+        logging.warning(f"Directory '{directory}' not found.")
         return []
 
     parquet_files = []
@@ -133,7 +133,7 @@ def view_parquet_files(directory="data/model-output", column="location", limit=1
             print(f"Error processing file: {str(e)}")
 
 
-def get_distinct_field_values(round_id, model, directory, schema, reset_cache):
+def get_distinct_field_values(round_id, model, directory, schema):
     """
     Extract distinct values for specified fields from parquet files.
 
@@ -146,6 +146,7 @@ def get_distinct_field_values(round_id, model, directory, schema, reset_cache):
         dict: Dictionary mapping field names to lists of their distinct values
     """
     # Get the parquet files for the model
+
     dir = os.path.join(directory, round_id, "model-output")
     parquet_files = get_parquet_files_for_model(round_id, dir, model)
     if not parquet_files:
@@ -156,12 +157,12 @@ def get_distinct_field_values(round_id, model, directory, schema, reset_cache):
         file_path = file_info['path']
         result = {}
         try:
-            print("Reading file:", file_path)
+            logging.debug(f"    Reading file: {file_path}")
             # Check which fields exist in this file
             #schema = pq.read_schema(file_path)
             field_data = {field: [] for field in schema.names}
             existing_fields = [field for field in schema.names]
-            print ("\tExisting fields:", existing_fields)
+            logging.debug(f"Fields in parquet file:{existing_fields}")
 
             if not existing_fields:
                 continue
