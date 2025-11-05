@@ -9,7 +9,10 @@ import sys
 import pandas as pd
 from contextlib import redirect_stdout
 
-from utils.read_confg import read_repos_yaml
+# Add parent directory to path to allow imports from utils
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from utils.config import read_repos_yaml
 
 
 def clone_and_extract_dirs(repo_url, dirs_to_copy, output_dir, ref='main', ref_type='branch'):

@@ -1,7 +1,7 @@
 import json
 import os
-from typing import Dict, List, Any, Optional, Union
 from dataclasses import dataclass
+from typing import Dict, List, Any, Optional
 
 
 @dataclass
