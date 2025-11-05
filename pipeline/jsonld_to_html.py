@@ -1,7 +1,12 @@
+import argparse
 import csv
 import json
 import os
+import sys
 from pathlib import Path
+
+# Add parent directory to path to allow imports and access to data/output directories
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import pandas as pd
 import pyarrow.compute as pc
@@ -632,15 +637,83 @@ def parse_jsonld_to_html(jsonld_file, round_id):
     return html
 
 
-# Generate the HTML
-input_file = 'output/round_2024-07-28.jsonld'
-output_file = 'output/round_2024-07-28.html'
-round_id = '2024-07-28'
+def main():
+    """Main entry point with argument parsing."""
+    parser = argparse.ArgumentParser(
+        description='Convert JSON-LD model metadata to HTML visualization',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Convert a specific round file
+  python jsonld_to_html.py -i output/round_2024-07-28.jsonld -o output/round_2024-07-28.html -r 2024-07-28
+  
+  # Use default paths (reads from output/round_2024-07-28.jsonld)
+  python jsonld_to_html.py
+  
+  # Process a different round
+  python jsonld_to_html.py -i output/round_2023-11-12.jsonld -o output/round_2023-11-12.html -r 2023-11-12
+        """
+    )
 
-html_content = parse_jsonld_to_html(input_file, round_id)
+    parser.add_argument(
+        '-i', '--input',
+        type=str,
+        default='output/round_2024-07-28.jsonld',
+        help='Input JSON-LD file path (default: output/round_2024-07-28.jsonld)'
+    )
 
-# Write to file
-with open(output_file, 'w', encoding='utf-8') as f:
-    f.write(html_content)
+    parser.add_argument(
+        '-o', '--output',
+        type=str,
+        default='output/round_2024-07-28.html',
+        help='Output HTML file path (default: output/round_2024-07-28.html)'
+    )
 
-print(f"HTML file generated: {output_file}")
+    parser.add_argument(
+        '-r', '--round-id',
+        type=str,
+        default='2024-07-28',
+        help='Round identifier for loading sample data (default: 2024-07-28)'
+    )
+
+    parser.add_argument(
+        '--no-sample-data',
+        action='store_true',
+        help='Skip loading sample output data from parquet files'
+    )
+
+    args = parser.parse_args()
+
+    # Validate input file exists
+    input_path = Path(args.input)
+    if not input_path.exists():
+        print(f"Error: Input file not found: {args.input}", file=sys.stderr)
+        sys.exit(1)
+
+    # Create output directory if it doesn't exist
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Generate the HTML
+    print(f"Converting {args.input} to HTML...")
+    print(f"Round ID: {args.round_id}")
+
+    try:
+        html_content = parse_jsonld_to_html(args.input, args.round_id)
+
+        # Write to file
+        with open(args.output, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+        print(f"✓ HTML file generated: {args.output}")
+
+    except Exception as e:
+        print(f"Error generating HTML: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
+

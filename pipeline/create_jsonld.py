@@ -4,6 +4,10 @@ import logging
 import os
 import re
 import shutil
+import sys
+
+# Add parent directory to path to allow imports from utils
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from utils.jsonld import yaml_to_jsonld, create_consolidated_round_jsonld, enrich_jsonld_with_model_output
 from utils.loggings import setup_logging
