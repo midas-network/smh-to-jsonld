@@ -4,6 +4,108 @@ import os
 
 import yaml
 
+from utils.location import get_location_info
+from utils.model_output_smh import get_output_file_types
+from utils.tasks_smh import get_targets
+from utils.temporal import calculate_temporal_coverage
+
+
+def initialize_work_example(jsonld_data):
+    """Ensure workExample exists in the JSON-LD data."""
+    if "workExample" not in jsonld_data:
+        jsonld_data["workExample"] = {
+            "@type": "Dataset",
+            "description": "RSV disease projection outputs",
+        }
+
+
+def add_round_info(jsonld_data, round_id):
+    """Add round information to the workExample."""
+    jsonld_data["workExample"]["isPartOf"] = {
+        "@type": "Event",
+        "name": f"Round {round_id}",
+        "identifier": round_id
+    }
+
+
+def add_file_formats(jsonld_data, file_types):
+    """Add file format information to the workExample."""
+    if not file_types:
+        return
+
+    jsonld_data["workExample"]["encodingFormat"] = []
+
+    if file_types.get("parquet", 0) > 0:
+        jsonld_data["workExample"]["encodingFormat"].append({
+            "@type": "FileFormat",
+            "name": "Apache Parquet",
+            "fileExtension": ".parquet"
+        })
+
+
+def add_targets(jsonld_data, target_obj_list):
+    """Add target variables to the workExample."""
+    for target_obj in target_obj_list:
+        if "variableMeasured" not in jsonld_data["workExample"]:
+            jsonld_data["workExample"]["variableMeasured"] = []
+        jsonld_data["workExample"]["variableMeasured"].append(target_obj)
+
+
+def add_spatial_coverage(jsonld_data, locations):
+    """Add spatial coverage information to the workExample."""
+    jsonld_data["workExample"]["spatialCoverage"] = []
+
+    for location_fips in locations:
+        location_info = get_location_info(location_fips)
+        if location_info:
+            jsonld_data["workExample"]["spatialCoverage"].append(location_info)
+            logging.debug(f"Added location info for FIPS {location_fips}")
+
+
+def add_temporal_coverage(jsonld_data, temporal_coverage):
+    """Add temporal coverage information to the workExample."""
+    if "startDate" in temporal_coverage and "endDate" in temporal_coverage:
+        jsonld_data["workExample"]["temporalCoverage"] = (
+            f"{temporal_coverage['startDate']}/{temporal_coverage['endDate']}"
+        )
+    elif "interval" in temporal_coverage:
+        jsonld_data["workExample"]["temporalCoverage"] = temporal_coverage["interval"]
+
+
+def enrich_jsonld_with_model_output(jsonld_data, round_id, model_name, config, distinct_field_values):
+    """Enrich JSON-LD data with information from model output files."""
+    # Extract field values
+    output_types = distinct_field_values.get("output_type", [])
+    locations = distinct_field_values.get("location", [])
+    age_groups = distinct_field_values.get("age_group", [])
+
+    # Get additional data
+    target_obj_list = get_targets(config, round_id, distinct_field_values)
+    temporal_coverage = calculate_temporal_coverage(distinct_field_values)
+    file_types = get_output_file_types(
+        round_id, model_name,
+        directory=os.path.join("data", round_id, "model-output", model_name)
+    )
+
+    # Initialize and populate workExample
+    initialize_work_example(jsonld_data)
+    add_round_info(jsonld_data, round_id)
+
+    jsonld_data["workExample"]["output_type"] = [output_types]
+
+    if file_types:
+        logging.debug(f"Found {len(file_types)} files for {model_name}")
+        add_file_formats(jsonld_data, file_types)
+
+    add_targets(jsonld_data, target_obj_list)
+    add_spatial_coverage(jsonld_data, locations)
+
+    if age_groups:
+        jsonld_data["workExample"]["ageGroups"] = age_groups
+
+    add_temporal_coverage(jsonld_data, temporal_coverage)
+
+
 def remove_none_values(obj):
     """Remove None values recursively from a dictionary or list."""
     if isinstance(obj, dict):

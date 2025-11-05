@@ -1,8 +1,5 @@
 import pandas as pd
 
-from utils.tasks import get_distinct_task_from_tasks_json
-
-
 def calculate_temporal_coverage(distinct_field_values_for_this_model):
     origin_dates = distinct_field_values_for_this_model["origin_date"]
     horizons = distinct_field_values_for_this_model["horizon"]

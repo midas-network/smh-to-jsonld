@@ -1,11 +1,11 @@
-import json
-from pathlib import Path
 import csv
+import json
+import os
+from pathlib import Path
 
 import pandas as pd
 import pyarrow.compute as pc
 from hubdata import connect_hub
-import os
 
 
 def get_first_n_rows_of_output(n, round_id, model):
@@ -450,13 +450,7 @@ def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html):
         #html += '                <h3>Output Types</h3>\n'
         for output_type in model['workExample']['output_type']:
             html += '                <div class="author">\n'
-            html += f'                    <strong>Type:</strong> {output_type.get("type", "N/A")}<br>\n'
-
-            output_type_id = output_type.get('output_type_id')
-            if output_type_id and 'required' in output_type_id:
-                quantiles = ', '.join(map(str, output_type_id['required']))
-                html += f'                    <strong>Output Type Ids:</strong> {quantiles}<br>\n'
-
+            html += f'                    <strong>Type:</strong> {output_type}<br>\n'
             html += '                </div>\n'
         html += '            </div>\n'
 
