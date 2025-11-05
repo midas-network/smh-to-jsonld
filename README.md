@@ -89,23 +89,35 @@ Options:
 
 ### 4. Run Complete Test Suite
 
-To test the entire pipeline:
+To test the entire pipeline using pytest:
 
 ```bash
 # Run all tests
-python test_pipeline.py
+pytest test_pipeline.py
 
 # Skip data update (use existing data)
-python test_pipeline.py --skip-update
+pytest test_pipeline.py --skip-update
 
 # Run only specific tests
-python test_pipeline.py --skip-update --skip-html
+pytest test_pipeline.py::TestCreateJsonLD
+
+# Run with verbose output
+pytest test_pipeline.py -v
+
+# Generate HTML test report
+pytest test_pipeline.py --html=report.html --self-contained-html
+
+# Run tests in verbose mode with detailed output
+pytest test_pipeline.py --skip-update -v -s
 ```
 
 Options:
 - `--skip-update`: Skip updating source data (assumes data already exists)
-- `--skip-jsonld`: Skip JSON-LD creation test
-- `--skip-html`: Skip HTML generation test
+- `-v, --verbose`: Increase verbosity
+- `-s`: Show print statements (don't capture output)
+- `-k EXPRESSION`: Only run tests matching the given expression
+- `--html=FILE`: Generate an HTML test report
+- `--self-contained-html`: Create a self-contained HTML report
 
 ## Output
 
