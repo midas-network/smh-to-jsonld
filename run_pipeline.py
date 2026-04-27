@@ -5,11 +5,28 @@ Runs all pipeline steps in sequence: update_source_data -> create_jsonld -> json
 """
 
 import argparse
+import json
+import re
 import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import List, Tuple
+
+from pipeline.clean_output import clean_output
+
+
+def get_schema_version_from_dir(round_dir: Path) -> str:
+    """Return the semantic schema version string from a round's hub-config/tasks.json."""
+    tasks_path = round_dir / "hub-config" / "tasks.json"
+    try:
+        with open(tasks_path, "r") as f:
+            data = json.load(f)
+        schema_url = data.get("schema_version", "")
+        m = re.search(r"/v(\d+\.\d+\.\d+)/", schema_url)
+        return m.group(1) if m else "unknown"
+    except Exception:
+        return "unknown"
 
 
 class Colors:
@@ -152,39 +169,63 @@ def update_source_data(skip: bool = False) -> bool:
 
 
 def create_jsonld(rounds: List[str] = None) -> bool:
-    """
-    Run the create_jsonld.py script.
+    """Dispatch JSON-LD generation per round using the appropriate versioned script.
 
     Args:
         rounds: List of specific round IDs to process (None = all rounds)
 
     Returns:
-        True if successful, False otherwise
+        True if all rounds succeeded, False otherwise
     """
     print_header("Step 2: Creating JSON-LD Files")
 
-    success, _, _ = run_command(
-        ['python3', 'pipeline/create_jsonld.py'],
-        'Converting model metadata to JSON-LD format'
+    data_dir = Path('data')
+    if not data_dir.exists():
+        print_error("Data directory not found")
+        return False
+
+    all_round_dirs = sorted(
+        d for d in data_dir.iterdir()
+        if d.is_dir() and re.match(r'\d{4}-\d{2}-\d{2}', d.name)
     )
 
-    if not success:
-        print_error("Failed to create JSON-LD files")
+    if rounds:
+        all_round_dirs = [d for d in all_round_dirs if d.name in rounds]
+
+    if not all_round_dirs:
+        print_error("No round directories found to process")
         return False
 
-    # Verify output files were created
-    output_dir = Path('output')
-    if not output_dir.exists():
-        print_error("Output directory was not created")
-        return False
+    all_success = True
 
-    jsonld_files = list(output_dir.glob('round_*.jsonld'))
-    if not jsonld_files:
-        print_error("No round JSON-LD files were created")
-        return False
+    for round_dir in all_round_dirs:
+        schema_ver = get_schema_version_from_dir(round_dir)
+        major = schema_ver.split('.')[0] if schema_ver != 'unknown' else '0'
 
-    print_success(f"Created {len(jsonld_files)} round JSON-LD files: {', '.join([f.name for f in jsonld_files])}")
-    return True
+        if major == '6':
+            script = 'pipeline/create_jsonld_v6_0_0.py'
+            cmd = [sys.executable, script, '--round_dir', str(round_dir)]
+            description = f'Generating JSON-LD for round {round_dir.name} (schema v{schema_ver})'
+        elif major == '5':
+            script = 'pipeline/create_jsonld_v5_1_0.py'
+            cmd = [sys.executable, script, '--round_dir', str(round_dir)]
+            description = f'Generating JSON-LD for round {round_dir.name} (schema v{schema_ver})'
+        else:
+            print_warning(f"Unknown schema version '{schema_ver}' for {round_dir.name} — skipping")
+            all_success = False
+            continue
+
+        success, _, _ = run_command(cmd, description)
+        if not success:
+            print_error(f"Failed to create JSON-LD for round {round_dir.name}")
+            all_success = False
+
+    if all_success:
+        output_dir = Path('output')
+        jsonld_files = list(output_dir.glob('round_*.jsonld'))
+        print_success(f"Created {len(jsonld_files)} round JSON-LD files: {', '.join(f.name for f in jsonld_files)}")
+
+    return all_success
 
 
 def generate_html(rounds: List[str] = None) -> bool:
@@ -218,9 +259,13 @@ def generate_html(rounds: List[str] = None) -> bool:
     html_files = []
 
     for jsonld_file in round_jsonld_files:
-        # Extract round ID from filename (e.g., round_2024-07-28.jsonld -> 2024-07-28)
-        round_id = jsonld_file.stem.replace('round_', '')
-        output_file = jsonld_file.with_suffix('.html')
+        # Extract round ID from filename: round_YYYY-MM-DD_vX.X.X.jsonld → YYYY-MM-DD
+        m = re.match(r'round_(\d{4}-\d{2}-\d{2})(?:_v[\d.]+)?', jsonld_file.stem)
+        round_id = m.group(1) if m else jsonld_file.stem.replace('round_', '')
+
+        # Preserve the version suffix in the HTML filename if present
+        version_part = jsonld_file.stem[len(f'round_{round_id}'):]  # e.g. '_v6.0.0' or ''
+        output_file = jsonld_file.with_name(f'round_{round_id}{version_part}.html')
 
         print_info(f"Converting {jsonld_file.name} to HTML...")
 
@@ -254,19 +299,31 @@ def main():
 Examples:
   # Run complete pipeline
   python run_pipeline.py
-  
+
+  # Clean output before running
+  python run_pipeline.py --clean
+
+  # Clean output for a specific round, then regenerate it
+  python run_pipeline.py --clean --skip-update --rounds 2025-07-27
+
   # Skip data update (use existing data)
   python run_pipeline.py --skip-update
-  
+
   # Run only specific steps
   python run_pipeline.py --skip-update --skip-html
-  
+
   # Process specific rounds only
   python run_pipeline.py --rounds 2024-07-28 2023-11-12
-  
+
   # Stop on first error
   python run_pipeline.py --stop-on-error
         """
+    )
+
+    parser.add_argument(
+        '--clean',
+        action='store_true',
+        help='Delete all generated output files before running the pipeline'
     )
 
     parser.add_argument(
@@ -318,6 +375,20 @@ Examples:
 
     # Track results
     results = {}
+
+    # Step 0: Clean output (optional)
+    if args.clean:
+        print_header("Step 0: Cleaning Output Directory")
+        ok = clean_output(output_dir="output", rounds=args.rounds)
+        if ok:
+            print_success("Output directory cleaned")
+        else:
+            print_error("Clean step encountered errors")
+            results['clean_output'] = False
+            if args.stop_on_error:
+                print_error("Pipeline stopped due to error in clean step")
+                sys.exit(1)
+        results['clean_output'] = ok
 
     # Step 1: Update source data
     if not args.skip_update:

@@ -8,7 +8,7 @@ Run with:
     pytest tests/test_jsonld_v6_integration.py -v
 
 To regenerate snapshots after an intentional change:
-    1. Run the pipeline:  python pipeline/create_jsonld_v6.py --round_dir data/2025-07-27
+    1. Run the pipeline:  python pipeline/create_jsonld_v6_0_0.py --round_dir data/2025-07-27
     2. Copy the normalized key fields into tests/snapshots/round_2025-07-27_key_fields.json
        following the schema already in that file.
 """
@@ -49,7 +49,7 @@ def round_output(tmp_path_factory):
     The pipeline relies on relative paths (data/<round_id>/), so we temporarily
     change the working directory to the repo root while it runs.
     """
-    from pipeline.create_jsonld_v6 import process_round
+    from pipeline.create_jsonld_v6_0_0 import process_round
 
     out = tmp_path_factory.mktemp("v6_output")
     original_cwd = os.getcwd()
@@ -63,7 +63,7 @@ def round_output(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def consolidated_jsonld(round_output):
-    path = round_output / f"round_{ROUND_ID}.jsonld"
+    path = round_output / f"round_{ROUND_ID}_v6.0.0.jsonld"
     assert path.exists(), f"Consolidated round JSON-LD not produced at: {path}"
     with open(path) as f:
         return json.load(f)
@@ -79,7 +79,7 @@ def jhu_jsonld(round_output):
 
 @pytest.fixture(scope="module")
 def html_content(round_output):
-    path = round_output / ROUND_ID / f"round_{ROUND_ID}.html"
+    path = round_output / ROUND_ID / f"round_{ROUND_ID}_v6.0.0.html"
     assert path.exists(), f"Round HTML not produced at: {path}"
     with open(path, encoding="utf-8") as f:
         return f.read()
@@ -253,7 +253,7 @@ class TestRoundHTML:
             assert name in html_content, f"Model '{name}' missing from HTML output"
 
     def test_reasonable_file_size(self, round_output):
-        path = round_output / ROUND_ID / f"round_{ROUND_ID}.html"
+        path = round_output / ROUND_ID / f"round_{ROUND_ID}_v6.0.0.html"
         assert path.stat().st_size > 5_000, "HTML file seems too small — may be incomplete"
 
 
@@ -266,7 +266,7 @@ class TestSnapshot:
     """Regression snapshot tests that catch unexpected changes to stable output fields.
 
     To update the snapshot after an intentional change:
-        1. Run:  python pipeline/create_jsonld_v6.py --round_dir data/2025-07-27
+        1. Run:  python pipeline/create_jsonld_v6_0_0.py --round_dir data/2025-07-27
         2. Update tests/snapshots/round_2025-07-27_key_fields.json manually.
     """
 

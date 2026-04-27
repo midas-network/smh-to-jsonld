@@ -1,4 +1,4 @@
-"""Unit tests for pure-function logic in pipeline/create_jsonld_v6.py and supporting utils.
+"""Unit tests for pure-function logic in pipeline/create_jsonld_v6_0_0.py and supporting utils.
 
 Run with:
     pytest tests/test_jsonld_v6_unit.py -v
@@ -7,7 +7,7 @@ Run with:
 import pytest
 import pandas as pd
 
-from pipeline.create_jsonld_v6 import (
+from pipeline.create_jsonld_v6_0_0 import (
     _extract_round_id,
     extract_diseases,
     extract_target_metadata,

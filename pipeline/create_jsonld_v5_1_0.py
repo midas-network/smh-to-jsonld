@@ -1,3 +1,13 @@
+"""JSON-LD generation for Hubverse schema v5.1.0 rounds.
+
+Usage (single round):
+    uv run python pipeline/create_jsonld_v5_1_0.py --round_dir data/2024-07-28
+    uv run python pipeline/create_jsonld_v5_1_0.py --round_dir data/2023-11-12
+
+Usage (all v5 rounds in data/):
+    uv run python pipeline/create_jsonld_v5_1_0.py
+"""
+
 import argparse
 import json
 import logging
@@ -5,6 +15,7 @@ import os
 import re
 import shutil
 import sys
+from pathlib import Path
 
 # Add parent directory to path to allow imports from utils
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -13,6 +24,8 @@ from utils.jsonld import yaml_to_jsonld, create_consolidated_round_jsonld, enric
 from utils.loggings import setup_logging
 from utils.model_output_smh import get_distinct_field_values, get_hub_ds
 from utils.tasks_json_parser import read_tasks_config
+
+SCHEMA_VERSION = "5.1.0"
 
 
 def get_unique_output_types(round_config):
@@ -135,9 +148,6 @@ def process_metadata_for_round(round_id, metadata_dir, output_dir, config):
     if not yaml_files:
         return [], {}, {}
 
-    round_config = config.get_round_by_id(round_id)
-    unique_output_types = get_unique_output_types(round_config)
-
     global_field_values_dict = {}
     field_values_by_model = {}
     round_results = []
@@ -190,10 +200,12 @@ def process_single_round(round_dir, base_dir, metadata_subdir, output_dir):
             f"{len(round_results)} models processed"
         )
 
-        # Create consolidated JSON-LD for the round
+        # Create consolidated JSON-LD for the round (versioned filename)
         create_consolidated_round_jsonld(
             round_output_dir, round_id, config,
-            global_field_values_dict, field_values_by_model
+            global_field_values_dict, field_values_by_model,
+            output_dir=output_dir,
+            schema_version=SCHEMA_VERSION,
         )
 
     return metadata_results
@@ -217,7 +229,15 @@ def process_all_metadata(base_dir="data", metadata_subdir="model-metadata", outp
 
 def parse_command_line_arguments():
     """Parse and return command line arguments."""
-    parser = argparse.ArgumentParser(description='Process model metadata files and convert to JSON-LD.')
+    parser = argparse.ArgumentParser(
+        description=f'Process model metadata files (Hubverse schema v{SCHEMA_VERSION}) and convert to JSON-LD.'
+    )
+    parser.add_argument(
+        '--round_dir',
+        default=None,
+        help='Process a single round directory (e.g. data/2024-07-28). '
+             'If omitted, all date-format subdirectories of --base_dir are processed.',
+    )
     parser.add_argument('--base_dir', default='data',
                         help='Base directory containing round directories')
     parser.add_argument('--metadata_subdir', default='model-metadata',
@@ -229,32 +249,33 @@ def parse_command_line_arguments():
 
 def log_processing_summary(results, args):
     """Log a summary of the processing results."""
-    location_count = sum(1 for r in results if r.get('location_count', 0) > 0)
-
-    logging.info(f"Added location information to {location_count} models")
-    logging.info(f"Base directory: {args.base_dir}")
-    logging.info(f"Metadata subdirectory: {args.metadata_subdir}")
+    logging.info(f"Processed {len(results)} models")
     logging.info(f"Output directory: {args.output}")
     logging.info("Processing complete")
 
 
 def main():
     """Main entry point for the script."""
-    # Setup logging
     setup_logging()
-
-    # Parse command line arguments
     args = parse_command_line_arguments()
 
-    # Process metadata with specified directories
-    logging.debug("Starting metadata processing...")
-    results = process_all_metadata(
-        base_dir=args.base_dir,
-        metadata_subdir=args.metadata_subdir,
-        output_dir=args.output
-    )
+    logging.debug(f"Starting v{SCHEMA_VERSION} metadata processing...")
 
-    # Log summary
+    if args.round_dir:
+        round_path = Path(args.round_dir)
+        results = process_single_round(
+            round_path.name,
+            str(round_path.parent),
+            args.metadata_subdir,
+            args.output,
+        )
+    else:
+        results = process_all_metadata(
+            base_dir=args.base_dir,
+            metadata_subdir=args.metadata_subdir,
+            output_dir=args.output,
+        )
+
     log_processing_summary(results, args)
 
 

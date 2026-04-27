@@ -23,6 +23,7 @@ Usage:
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import List, Tuple
 
@@ -50,7 +51,7 @@ def data_dir():
 
 def run_command(command: List[str], description: str) -> Tuple[bool, str, str]:
     """
-    Run a shell command and capture output.
+    Run a shell command, streaming output live to the terminal.
 
     Args:
         command: Command to run as list of strings
@@ -61,29 +62,31 @@ def run_command(command: List[str], description: str) -> Tuple[bool, str, str]:
     """
     print(f"\nRunning: {description}")
     print(f"Command: {' '.join(command)}")
+    sys.stdout.flush()
 
     try:
+        # Stream stdout/stderr directly to the terminal so progress is visible
+        # even while the subprocess is still running.
         result = subprocess.run(
             command,
-            capture_output=True,
+            stdout=sys.stdout,
+            stderr=sys.stderr,
             text=True,
             timeout=300  # 5 minute timeout
         )
 
         if result.returncode == 0:
-            print(f"✓ {description} completed successfully")
-            return True, result.stdout, result.stderr
+            print(f"\n✓ {description} completed successfully")
+            return True, "", ""
         else:
-            print(f"✗ {description} failed with return code {result.returncode}")
-            if result.stderr:
-                print(f"Error output: {result.stderr[:500]}")
-            return False, result.stdout, result.stderr
+            print(f"\n✗ {description} failed with return code {result.returncode}")
+            return False, "", f"return code {result.returncode}"
 
     except subprocess.TimeoutExpired:
-        print(f"✗ {description} timed out after 5 minutes")
+        print(f"\n✗ {description} timed out after 5 minutes")
         return False, "", "Timeout"
     except Exception as e:
-        print(f"✗ {description} failed with exception: {e}")
+        print(f"\n✗ {description} failed with exception: {e}")
         return False, "", str(e)
 
 
@@ -257,22 +260,22 @@ class TestUpdateSourceData:
 
 
 class TestCreateJsonLD:
-    """Tests for the create_jsonld.py script."""
+    """Tests for the versioned create_jsonld scripts."""
 
     def test_create_jsonld(self, output_dir):
         """
-        Test the create_jsonld.py script.
+        Test the create_jsonld_v5_1_0.py script.
 
         Args:
             output_dir: Path to the output directory
         """
         # Run the script
         success, stdout, stderr = run_command(
-            ['python3', 'pipeline/create_jsonld.py'],
+            ['python3', 'pipeline/create_jsonld_v5_1_0.py'],
             'Creating JSON-LD files'
         )
 
-        assert success, f"create_jsonld.py failed: {stderr}"
+        assert success, f"create_jsonld_v5_1_0.py failed: {stderr}"
 
         # Verify output directory exists
         assert output_dir.exists(), "Output directory was not created"
@@ -334,9 +337,11 @@ class TestJsonLDToHTML:
         # Test conversion for each round file
         failed_conversions = []
         for jsonld_file in round_jsonld_files:
-            # Extract round ID from filename (e.g., round_2024-07-28.jsonld -> 2024-07-28)
-            round_id = jsonld_file.stem.replace('round_', '')
-            output_file = jsonld_file.with_suffix('.html')
+            # Extract round ID: round_YYYY-MM-DD_vX.X.X.jsonld → YYYY-MM-DD
+            m = re.match(r'round_(\d{4}-\d{2}-\d{2})(?:_v[\d.]+)?', jsonld_file.stem)
+            round_id = m.group(1) if m else jsonld_file.stem.replace('round_', '')
+            version_part = jsonld_file.stem[len(f'round_{round_id}'):]
+            output_file = jsonld_file.with_name(f'round_{round_id}{version_part}.html')
 
             # Run the script
             success, stdout, stderr = run_command(

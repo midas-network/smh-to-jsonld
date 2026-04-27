@@ -187,7 +187,8 @@ def yaml_to_jsonld(yaml_file_path):
 
     return jsonld
 
-def create_consolidated_round_jsonld(round_output_dir, round_id, config, global_field_values_dict, field_values_by_model):
+def create_consolidated_round_jsonld(round_output_dir, round_id, config, global_field_values_dict,
+                                     field_values_by_model, output_dir="output", schema_version=None):
     """
     Create a consolidated JSON-LD file for the entire round that includes data from all model JSON-LD files.
 
@@ -253,7 +254,8 @@ def create_consolidated_round_jsonld(round_output_dir, round_id, config, global_
     consolidated["numberOfItems"] = model_count
 
     # Write the consolidated file
-    consolidated_file_path = os.path.join("output", f"round_{round_id}.jsonld")
+    version_suffix = f"_v{schema_version}" if schema_version else ""
+    consolidated_file_path = os.path.join(output_dir, f"round_{round_id}{version_suffix}.jsonld")
     with open(consolidated_file_path, 'w') as f:
         json.dump(consolidated, f, indent=2)
 

@@ -1,6 +1,8 @@
 import json
 import os
+import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 
@@ -261,3 +263,23 @@ if __name__ == "__main__":
     print(f"\nAll targets: {', '.join(config.get_all_targets())}")
 
     print(f"\nAll locations: {len(config.get_all_locations())} locations")
+
+
+def get_schema_version(round_dir: str) -> str:
+    """Return the semantic schema version (e.g. '6.0.0', '5.1.0') from a round directory.
+
+    Reads hub-config/tasks.json and extracts the version number embedded in the
+    schema_version URL, e.g.:
+      https://…/schemas/main/v6.0.0/tasks-schema.json  →  '6.0.0'
+
+    Returns 'unknown' when the file is missing or the URL is not parseable.
+    """
+    tasks_path = Path(round_dir) / "hub-config" / "tasks.json"
+    try:
+        with open(tasks_path, "r") as f:
+            data = json.load(f)
+        schema_url = data.get("schema_version", "")
+        m = re.search(r"/v(\d+\.\d+\.\d+)/", schema_url)
+        return m.group(1) if m else "unknown"
+    except Exception:
+        return "unknown"

@@ -3,4 +3,6 @@
 pipeline/data
 .DS_Store
 .idea
-__pycache*
+__pycache__/
+*.pyc
+.venv/

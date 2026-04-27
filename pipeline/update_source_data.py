@@ -36,8 +36,8 @@ def clone_and_extract_dirs(repo_url, dirs_to_copy, output_dir, ref='main', ref_t
             os.chdir(tmpdir)
             # Fetch the specific tag
             subprocess.run(["git", "fetch", "--depth", "1", "origin", f"refs/tags/{ref}:refs/tags/{ref}"], check=True)
-            # Checkout the tag
-            subprocess.run(["git", "checkout", f"tags/{ref}"], check=True)
+            # Checkout the tag; -c advice.detachedHead=false suppresses the detached HEAD advisory
+            subprocess.run(["git", "-c", "advice.detachedHead=false", "checkout", f"tags/{ref}"], check=True)
             # Return to original directory
             os.chdir(current_dir)
         else:

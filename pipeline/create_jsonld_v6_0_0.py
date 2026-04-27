@@ -1,3 +1,9 @@
+"""JSON-LD generation for Hubverse schema v6.0.0 rounds.
+
+Usage (single round):
+    uv run python pipeline/create_jsonld_v6_0_0.py --round_dir data/2025-07-27
+"""
+
 import argparse
 import json
 import logging
@@ -21,11 +27,13 @@ from utils.model_output_smh import (
 from utils.temporal import calculate_temporal_coverage
 from pipeline.jsonld_to_html import parse_jsonld_to_html
 
+SCHEMA_VERSION = "6.0.0"
+
 
 def parse_command_line_arguments():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
-        description="Create JSON-LD for a single v6 round directory."
+        description=f"Create JSON-LD for a single v{SCHEMA_VERSION} round directory."
     )
     parser.add_argument(
         "--round_dir",
@@ -414,7 +422,7 @@ def create_consolidated_round_jsonld_v6(round_output_dir, output_dir, round_id, 
 
     consolidated["numberOfItems"] = len(consolidated["hasPart"])
 
-    output_path = Path(output_dir) / f"round_{round_id}.jsonld"
+    output_path = Path(output_dir) / f"round_{round_id}_v{SCHEMA_VERSION}.jsonld"
     with open(output_path, "w") as f:
         json.dump(consolidated, f, indent=2)
 
@@ -428,7 +436,7 @@ def create_consolidated_round_jsonld_v6(round_output_dir, output_dir, round_id, 
 
 def create_round_html(round_jsonld_path, round_output_dir, round_id):
     """Create round HTML summary inside the round output directory."""
-    html_path = Path(round_output_dir) / f"round_{round_id}.html"
+    html_path = Path(round_output_dir) / f"round_{round_id}_v{SCHEMA_VERSION}.html"
     html_content = parse_jsonld_to_html(str(round_jsonld_path), round_id)
 
     with open(html_path, "w", encoding="utf-8") as f:
@@ -499,7 +507,7 @@ def main():
     setup_logging()
     args = parse_command_line_arguments()
 
-    logging.info("Starting v6 JSON-LD generation...")
+    logging.info(f"Starting v{SCHEMA_VERSION} JSON-LD generation...")
     results = process_round(args.round_dir, args.output)
     log_processing_summary(results, args)
 
