@@ -1,0 +1,18 @@
+{
+  "identifier": "2025-07-27",
+  "numberOfItems": 7,
+  "healthCondition": {
+    "@type": "MedicalCondition",
+    "name": "respiratory syncytial virus infectious disease",
+    "uri": "http://purl.obolibrary.org/obo/MONDO_0001577"
+  },
+  "model_names": [
+    "CEPH-ASTRA_RSV",
+    "Ensemble",
+    "Ensemble_LOP",
+    "Ensemble_LOP_untrimmed",
+    "JHU_UNC-flepiMoP",
+    "UNCC-Hierbin",
+    "UT-ImmunoSEIRS"
+  ]
+}

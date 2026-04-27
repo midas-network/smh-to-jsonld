@@ -493,7 +493,7 @@ def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html):
                 geoname_url = geodata_map[location_code]
                 html += f'                    <span class="location"><a href="{geoname_url}" target="_blank">{location_name} ({location_code})</a></span>\n'
             elif location_code:
-                search_link = f"https://www.geonames.org/search.html?q={location_name.replace(" ", "+")}"
+                search_link = f"https://www.geonames.org/search.html?q={location_name.replace(' ', '+')}"
                 html += f'                    <span class="location"><a href="{search_link}" target="_blank">{location_name} ({location_code})</a></span>\n'
             else:
                 html += f'                    <span class="location">{location_name}</span>\n'
