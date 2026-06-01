@@ -337,64 +337,73 @@ def generate_variables_measured_section(model):
     return html
 
 
+def format_available_output_types(variable):
+    """Format target output-type availability for HTML display."""
+    output_types = variable.get("available_output_types")
+    if not output_types:
+        return "N/A"
+    if isinstance(output_types, list):
+        return ", ".join(str(output_type) for output_type in output_types)
+    return str(output_types)
+
+
 def generate_spatial_coverage_section(model, geodata_map):
-    """Generate spatial coverage section with location links."""
+    """Generate spatial coverage section content."""
     if 'workExample' not in model or 'spatialCoverage' not in model['workExample']:
         return ''
 
-    html = """        <h3>Spatial Coverage</h3>
-        <div>
-"""
+    html = ''
     for location in model['workExample']['spatialCoverage']:
         location_name = location.get('gn:name', 'Unknown')
         location_code = location.get('iso3166-2:code', '')
 
-        # Use geodata mapping if available, otherwise fall back to search
+        html += '                <div class="author">\n'
         if location_code and location_code in geodata_map:
             geoname_url = geodata_map[location_code]
-            html += f'            <span class="location"><a href="{geoname_url}" target="_blank">{location_name} ({location_code})</a></span>\n'
+            html += f'                    <strong>Location:</strong> <a href="{geoname_url}" target="_blank">{location_name} ({location_code})</a><br>\n'
         elif location_code:
             search_link = f"https://www.geonames.org/search.html?q={location_name.replace(' ', '+')}"
-            html += f'            <span class="location"><a href="{search_link}" target="_blank">{location_name} ({location_code})</a></span>\n'
+            html += f'                    <strong>Location:</strong> <a href="{search_link}" target="_blank">{location_name} ({location_code})</a><br>\n'
         else:
-            html += f'            <span class="location">{location_name}</span>\n'
+            html += f'                    <strong>Location:</strong> {location_name}<br>\n'
+        html += '                </div>\n'
 
-    html += '        </div>\n'
     return html
 
 
 def generate_output_types_section(model):
-    """Generate output types section."""
+    """Generate output types section content."""
     if 'workExample' not in model or 'output_type' not in model['workExample']:
         return ''
 
-    html = '        <h3>Output Types</h3>\n'
-    for output_type in model['workExample']['output_type']:
-        html += '        <div class="author">\n'
-        html += f'            <strong>Type:</strong> {output_type.get("type", "N/A")}<br>\n'
+    # output_type is stored as [list_of_types]; flatten to get individual type strings
+    output_types = []
+    for item in model['workExample']['output_type']:
+        if isinstance(item, list):
+            output_types.extend(item)
+        else:
+            output_types.append(item)
 
-        output_type_id = output_type.get('output_type_id')
-        if output_type_id and 'required' in output_type_id:
-            quantiles = ', '.join(map(str, output_type_id['required']))
-            html += f'            <strong>Output Type Ids:</strong> {quantiles}<br>\n'
-
-        html += '        </div>\n'
+    html = ''
+    for output_type in output_types:
+        html += '                <div class="author">\n'
+        html += f'                    <strong>Type:</strong> {output_type}<br>\n'
+        html += '                </div>\n'
 
     return html
 
 
 def generate_age_groups_section(model):
-    """Generate age groups section."""
+    """Generate age groups section content."""
     if 'workExample' not in model or 'ageGroups' not in model['workExample']:
         return ''
 
-    html = """        <h3>Age Groups</h3>
-        <div class="age-groups">
-"""
+    html = ''
     for age_group in model['workExample']['ageGroups']:
-        html += f'            <span class="location">{age_group}</span>\n'
+        html += '                <div class="author">\n'
+        html += f'                    <strong>Age Group:</strong> {age_group}<br>\n'
+        html += '                </div>\n'
 
-    html += '        </div>\n'
     return html
 
 
@@ -412,7 +421,7 @@ def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html):
     html = '        <div class="tabs">\n'
     html += '            <div class="tab-buttons">\n'
 
-    # Sample Output Data is always the default tab if available
+    # Projection Data Snippet is always the default tab if available
     first_tab = 'sample' if has_sample_output else None
     if not first_tab:
         if has_output_types:
@@ -426,7 +435,7 @@ def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html):
 
     # Add tab buttons
     if has_sample_output:
-        html += f'                <button class="tab-button active" id="model-{model_idx}-tab-sample" onclick="switchTab({model_idx}, \'sample\')">Sample Output Data</button>\n'
+        html += f'                <button class="tab-button active" id="model-{model_idx}-tab-sample" onclick="switchTab({model_idx}, \'sample\')">Projection Data Snippet</button>\n'
     if has_targets:
         active_class = ' active' if first_tab == 'targets' else ''
         html += f'                <button class="tab-button{active_class}" id="model-{model_idx}-tab-targets" onclick="switchTab({model_idx}, \'targets\')">Targets</button>\n'
@@ -442,7 +451,7 @@ def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html):
 
     html += '            </div>\n'
 
-    # Add tab content for sample output data
+    # Add tab content for projection data snippet
     if has_sample_output:
         html += f'            <div class="tab-content active" id="model-{model_idx}-content-sample">\n'
         html += f'                {sample_output_html}\n'
@@ -452,11 +461,7 @@ def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html):
     if has_output_types:
         active_class = ' active' if first_tab == 'output' else ''
         html += f'            <div class="tab-content{active_class}" id="model-{model_idx}-content-output">\n'
-        #html += '                <h3>Output Types</h3>\n'
-        for output_type in model['workExample']['output_type']:
-            html += '                <div class="author">\n'
-            html += f'                    <strong>Type:</strong> {output_type}<br>\n'
-            html += '                </div>\n'
+        html += generate_output_types_section(model)
         html += '            </div>\n'
 
     # Add tab content for targets
@@ -471,6 +476,7 @@ def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html):
             html += f'                        <strong>Unit:</strong> {variable.get("unitText", "N/A")}<br>\n'
             html += f'                        <strong>Target ID:</strong> {variable.get("target_id", "N/A")}<br>\n'
             html += f'                        <strong>Type:</strong> {variable.get("target_type", "N/A")}<br>\n'
+            html += f'                        <strong>Available Output Types:</strong> {format_available_output_types(variable)}<br>\n'
             html += f'                        <strong>Temporal Unit:</strong> {variable.get("temporalUnit", "N/A")}<br>\n'
             if 'identifier' in variable:
                 html += f'                        <a href="{variable["identifier"]}" target="_blank">Ontology Reference</a><br>\n'
@@ -482,33 +488,14 @@ def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html):
     if has_spatial:
         active_class = ' active' if first_tab == 'spatial' else ''
         html += f'            <div class="tab-content{active_class}" id="model-{model_idx}-content-spatial">\n'
-        #html += '                <h3>Spatial Coverage</h3>\n'
-        html += '                <div>\n'
-        for location in model['workExample']['spatialCoverage']:
-            location_name = location.get('gn:name', 'Unknown')
-            location_code = location.get('iso3166-2:code', '')
-
-            # Use geodata mapping if available, otherwise fall back to search
-            if location_code and location_code in geodata_map:
-                geoname_url = geodata_map[location_code]
-                html += f'                    <span class="location"><a href="{geoname_url}" target="_blank">{location_name} ({location_code})</a></span>\n'
-            elif location_code:
-                search_link = f"https://www.geonames.org/search.html?q={location_name.replace(' ', '+')}"
-                html += f'                    <span class="location"><a href="{search_link}" target="_blank">{location_name} ({location_code})</a></span>\n'
-            else:
-                html += f'                    <span class="location">{location_name}</span>\n'
-        html += '                </div>\n'
+        html += generate_spatial_coverage_section(model, geodata_map)
         html += '            </div>\n'
 
     # Add tab content for age groups
     if has_age_groups:
         active_class = ' active' if first_tab == 'age' else ''
         html += f'            <div class="tab-content{active_class}" id="model-{model_idx}-content-age">\n'
-    #    html += '                <h3>Age Groups</h3>\n'
-        html += '                <div class="age-groups">\n'
-        for age_group in model['workExample']['ageGroups']:
-            html += f'                    <span class="location">{age_group}</span>\n'
-        html += '                </div>\n'
+        html += generate_age_groups_section(model)
         html += '            </div>\n'
 
     html += '        </div>\n'
@@ -547,8 +534,8 @@ def parse_jsonld_to_html(jsonld_file, round_id):
     html = generate_html_head(data.get('name', 'Dataset'))
     html += generate_header_section(data)
 
-    # Generate model index
-    models = data.get('hasPart', [])
+    # Generate model index (sorted alphabetically by model name)
+    models = sorted(data.get('hasPart', []), key=lambda m: m.get('name', '').lower())
     html += generate_model_index(models)
 
     # Process each model
@@ -624,7 +611,7 @@ def parse_jsonld_to_html(jsonld_file, round_id):
         # Temporal coverage
         html += generate_temporal_coverage_section(model)
 
-        # Sample Output Data, Output types, Targets, Spatial Coverage, and Age groups in tabs
+        # Projection Data Snippet, Output types, Targets, Spatial Coverage, and Age groups in tabs
         html += generate_tabbed_section(model, idx, geodata_map, parquet_html)
 
         html += '    </div>\n'

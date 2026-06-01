@@ -132,9 +132,15 @@ def extract_target_metadata(round_config):
     target_metadata = {}
 
     for model_task in round_config.get("model_tasks", []):
+        output_type_names = sorted((model_task.get("output_type") or {}).keys())
+
         for target in model_task.get("target_metadata", []):
             target_id = target.get("target_id")
-            if not target_id or target_id in target_metadata:
+            if not target_id:
+                continue
+
+            if target_id in target_metadata:
+                target_metadata[target_id]["_output_type_set"].update(output_type_names)
                 continue
 
             additional_metadata = target.get("additional_metadata") or {}
@@ -150,7 +156,13 @@ def extract_target_metadata(round_config):
                 "uri": target.get("uri") or additional_metadata.get("uri"),
                 "alternative_name": target.get("alternative_name")
                 or additional_metadata.get("alternative_name"),
+                "_output_type_set": set(output_type_names),
             }
+
+    for target in target_metadata.values():
+        output_type_set = target.pop("_output_type_set", set())
+        if output_type_set:
+            target["available_output_types"] = sorted(output_type_set)
 
     return target_metadata
 
@@ -253,6 +265,9 @@ def build_target_objects(target_metadata, distinct_field_values):
 
         if target.get("target_keys"):
             target_obj["target_keys"] = target["target_keys"]
+
+        if target.get("available_output_types"):
+            target_obj["available_output_types"] = target["available_output_types"]
 
         if target.get("is_step_ahead") and target.get("time_unit"):
             target_obj["temporalUnit"] = target["time_unit"]

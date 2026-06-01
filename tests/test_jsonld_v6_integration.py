@@ -178,6 +178,13 @@ class TestPerModelJsonLD:
         vm = we.get("variableMeasured", [])
         assert len(vm) > 0, "variableMeasured should contain at least one target"
 
+    def test_jhu_variable_measured_has_available_output_types(self, jhu_jsonld):
+        vm = jhu_jsonld["workExample"]["variableMeasured"]
+        for entry in vm:
+            assert "available_output_types" in entry
+            assert isinstance(entry["available_output_types"], list)
+            assert len(entry["available_output_types"]) > 0
+
     def test_jhu_variable_measured_has_identifier(self, jhu_jsonld):
         vm = jhu_jsonld["workExample"]["variableMeasured"]
         for entry in vm:
@@ -247,6 +254,9 @@ class TestRoundHTML:
 
     def test_has_spatial_coverage_section(self, html_content):
         assert "Spatial Coverage" in html_content
+
+    def test_targets_show_available_output_types(self, html_content):
+        assert "Available Output Types:" in html_content
 
     def test_all_model_names_in_html(self, html_content):
         for name in EXPECTED_MODEL_NAMES:

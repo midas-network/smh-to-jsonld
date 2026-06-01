@@ -48,18 +48,23 @@ import logging
 #     return []
 
 def get_target_metadata(config, round_id):
-    """Extract target metadxrata from tasks.json for each target."""
+    """Extract target metadata and available output types per target for a round."""
     target_metadata = {}
+    target_output_types = {}
 
     # Go through all rounds and tasks
     for round_config in config.get_all_rounds():
         config_round_id = round_config.round_id
         if config_round_id == round_id:
             for task in round_config.model_tasks:
+                output_type_names = sorted(task.output_type.keys()) if hasattr(task, "output_type") else []
                 if hasattr(task, 'target_metadata'):
                     for target in task.target_metadata:
                         # Access attributes directly instead of using .get()
-                        if hasattr(target, 'target_id') and target.target_id not in target_metadata:
+                        if not hasattr(target, 'target_id') or not target.target_id:
+                            continue
+
+                        if target.target_id not in target_metadata:
                             # Check if URI exists and log it
                             if hasattr(target, 'uri'):
                                 logging.debug(
@@ -71,11 +76,20 @@ def get_target_metadata(config, round_id):
                             # Store the target metadata
                             target_metadata[target.target_id] = target
 
+                        if target.target_id not in target_output_types:
+                            target_output_types[target.target_id] = set()
+                        target_output_types[target.target_id].update(output_type_names)
+
     logging.debug(f"Extracted metadata for {len(target_metadata)} unique targets")
-    return target_metadata
+    normalized_output_types = {
+        target_id: sorted(list(output_type_set))
+        for target_id, output_type_set in target_output_types.items()
+        if output_type_set
+    }
+    return target_metadata, normalized_output_types
 
 def get_targets(config, round_id, field_values_by_model):
-    target_metadata_dict = get_target_metadata(config, round_id)
+    target_metadata_dict, target_output_types = get_target_metadata(config, round_id)
 
     target_obj_list = []
     for target in target_metadata_dict:
@@ -112,6 +126,9 @@ def get_targets(config, round_id, field_values_by_model):
 
             if target_md and hasattr(target_md, "target_keys") and target_md.target_keys:
                 target_obj["target_keys"] = target_md.target_keys
+
+            if target in target_output_types:
+                target_obj["available_output_types"] = target_output_types[target]
 
             # Add time unit if step-ahead target
             if target_md and hasattr(target_md, "is_step_ahead") and target_md.is_step_ahead:
