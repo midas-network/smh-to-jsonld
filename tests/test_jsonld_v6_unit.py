@@ -144,6 +144,10 @@ class TestExtractTargetMetadata:
         return {
             "model_tasks": [
                 {
+                    "output_type": {
+                        "quantile": {"output_type_id": "output_type", "value": {"output_type": "quantile"}},
+                        "sample": {"output_type_id": "output_type", "value": {"output_type": "sample"}},
+                    },
                     "target_metadata": [
                         {
                             "target_id": "inc hosp",
@@ -160,6 +164,18 @@ class TestExtractTargetMetadata:
                             },
                         }
                     ]
+                },
+                {
+                    "output_type": {
+                        "cdf": {"output_type_id": "output_type", "value": {"output_type": "cdf"}},
+                    },
+                    "target_metadata": [
+                        {
+                            "target_id": "inc hosp",
+                            "target_name": "Duplicate target in another task",
+                            "additional_metadata": {},
+                        }
+                    ],
                 }
             ]
         }
@@ -183,6 +199,10 @@ class TestExtractTargetMetadata:
         assert t["target_units"] == "count"
         assert t["is_step_ahead"] is True
         assert t["time_unit"] == "week"
+
+    def test_available_output_types_merged_across_tasks(self, round_config):
+        result = extract_target_metadata(round_config)
+        assert result["inc hosp"]["available_output_types"] == ["cdf", "quantile", "sample"]
 
     def test_duplicate_targets_deduped_first_wins(self):
         round_config = {
@@ -234,6 +254,7 @@ class TestBuildTargetObjects:
                 "time_unit": "week",
                 "uri": "http://purl.obolibrary.org/obo/APOLLO_SV_00000645",
                 "alternative_name": "incident hospitalization count",
+                "available_output_types": ["quantile", "sample"],
             }
         }
 
@@ -289,6 +310,10 @@ class TestBuildTargetObjects:
         result = build_target_objects(inc_hosp_meta, {"target": ["inc hosp"]})
         assert result[0]["target_id"] == "inc hosp"
         assert result[0]["target_type"] == "discrete"
+
+    def test_available_output_types_preserved(self, inc_hosp_meta):
+        result = build_target_objects(inc_hosp_meta, {"target": ["inc hosp"]})
+        assert result[0]["available_output_types"] == ["quantile", "sample"]
 
 
 # ---------------------------------------------------------------------------
