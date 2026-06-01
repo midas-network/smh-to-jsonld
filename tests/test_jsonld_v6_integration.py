@@ -146,6 +146,61 @@ class TestConsolidatedRoundJsonLD:
         assert isinstance(we_type, list)
         assert "https://midasnetwork.us/ontology/class-datasetsmidas97.html" in we_type
 
+    def test_all_parts_have_non_empty_variable_measured(self, consolidated_jsonld):
+        for part in consolidated_jsonld["hasPart"]:
+            vm = part.get("workExample", {}).get("variableMeasured", [])
+            assert isinstance(vm, list), f"variableMeasured must be a list for part: {part.get('name')}"
+            assert len(vm) > 0, f"variableMeasured is empty for part: {part.get('name')}"
+
+    def test_variable_measured_entries_have_required_fields(self, consolidated_jsonld):
+        required_fields = {
+            "@type",
+            "name",
+            "identifier",
+            "alternateName",
+            "unitText",
+            "target_id",
+            "target_type",
+            "target_keys",
+            "available_output_types",
+        }
+
+        for part in consolidated_jsonld["hasPart"]:
+            vm_entries = part.get("workExample", {}).get("variableMeasured", [])
+            for entry in vm_entries:
+                missing = sorted(required_fields - set(entry.keys()))
+                assert not missing, (
+                    f"variableMeasured entry in part '{part.get('name')}' missing fields: {missing}"
+                )
+                assert entry["@type"] == "PropertyValue"
+                assert isinstance(entry["target_keys"], dict)
+                assert entry["target_keys"].get("target") == entry["target_id"]
+                assert isinstance(entry["available_output_types"], list)
+                assert len(entry["available_output_types"]) > 0
+
+    def test_inc_hosp_variable_measured_entry_has_expected_values(self, consolidated_jsonld):
+        matching_entries = []
+        for part in consolidated_jsonld["hasPart"]:
+            vm_entries = part.get("workExample", {}).get("variableMeasured", [])
+            for entry in vm_entries:
+                if entry.get("target_id") == "inc hosp":
+                    matching_entries.append((part.get("name"), entry))
+
+        assert matching_entries, "No variableMeasured entry found for target_id 'inc hosp'"
+
+        for part_name, entry in matching_entries:
+            assert entry["@type"] == "PropertyValue", (
+                f"Unexpected @type for inc hosp in part '{part_name}': {entry.get('@type')}"
+            )
+            assert entry["name"] == "Weekly incident RSV hospitalizations"
+            assert entry["identifier"] == "http://purl.obolibrary.org/obo/APOLLO_SV_00000645"
+            assert entry["alternateName"] == "incident hospitalization count"
+            assert entry["unitText"] == "count"
+            assert entry["target_type"] == "discrete"
+            assert entry["target_keys"] == {"target": "inc hosp"}
+            assert sorted(entry["available_output_types"]) == ["quantile", "sample"]
+            assert entry["temporalUnit"] == "week"
+
 
 # ---------------------------------------------------------------------------
 # Per-model JSON-LD files

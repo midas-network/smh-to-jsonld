@@ -9,16 +9,25 @@ from pathlib import Path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import pandas as pd
-import pyarrow.compute as pc
-from hubdata import connect_hub
+import pyarrow.dataset as ds
 
 
 def get_first_n_rows_of_output(n, round_id, model):
-    hub_connection = connect_hub(Path('data' + os.sep + round_id + os.sep))
-    hub_ds = hub_connection.get_dataset()
+    model_dir = Path("data") / round_id / "model-output" / model
+    parquet_files = sorted(model_dir.glob("*.parquet"))
 
-    pa_table = hub_ds.to_table(filter=pc.field('model_id') == model)
+    if not parquet_files:
+        return ""
+
+    pa_table = ds.dataset([str(path) for path in parquet_files], format="parquet").to_table()
     df = pa_table.to_pandas()
+
+    # Be robust to mixed files by keeping only rows for this model when available.
+    if "model_id" in df.columns:
+        df = df[df["model_id"] == model]
+
+    if df.empty:
+        return ""
 
     # Get the first `n` rows and the last row
     if len(df) > n:
@@ -47,11 +56,27 @@ def load_geodata_mapping():
 def get_license_map():
     """Return mapping of license names to their URLs."""
     return {
-        "CC-BY-4.0": "https://creativecommons.org/licenses/by/4.0/",
+        # Open Source / Software
+        "MIT":          "https://opensource.org/license/mit/",
+        "GPL-3.0":      "https://www.gnu.org/licenses/gpl-3.0.en.html",
+        "APACHE-2.0":   "https://www.apache.org/licenses/LICENSE-2.0",
         "BSD SIMPLIFIED": "https://opensource.org/license/bsd-2-clause",
-        "CC-BY_SA-4.0": "https://creativecommons.org/licenses/by-sa/4.0/",
-        "MIT": "https://opensource.org/license/mit/",
-        "GPL-3.0": "https://www.gnu.org/licenses/gpl-3.0.en.html"
+
+        # Creative Commons
+        "CC0-1.0":      "https://creativecommons.org/publicdomain/zero/1.0/",
+        "CC-BY-4.0":    "https://creativecommons.org/licenses/by/4.0/",
+        "CC-BY-NC-4.0": "https://creativecommons.org/licenses/by-nc/4.0/",
+        "CC BY-NC 4.0": "https://creativecommons.org/licenses/by-nc/4.0/",   # alternate spacing variant
+        "CC-BY-SA-4.0": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "CC-BY_SA-4.0": "https://creativecommons.org/licenses/by-sa/4.0/",   # legacy underscore variant
+
+        # Open Data Commons
+        "ODC-BY":       "https://opendatacommons.org/licenses/by/",
+        "ODBL":         "https://opendatacommons.org/licenses/odbl/",
+        "PDDL":         "https://opendatacommons.org/licenses/pddl/",
+
+        # Government / Other
+        "OGL-3.0":      "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
     }
 
 
@@ -84,6 +109,14 @@ def generate_html_head(title):
             border-radius: 5px;
             border-left: 4px solid #3498db;
         }}
+        .model-separator {{
+            border: 0;
+            height: 2px;
+            margin: 32px 0;
+            width: 100%;
+            background: #cfd8e3;
+            border-radius: 0;
+        }}
         .author {{
             margin: 0px 0;
             padding: 0px 10px;
@@ -114,6 +147,7 @@ def generate_html_head(title):
             gap: 15px;
             margin: 10px 0;
         }}
+        .no-wrap {{ white-space: nowrap; }}
         a {{ color: #3498db; text-decoration: none; }}
         a:hover {{ text-decoration: underline; }}
         .age-groups {{ margin: 10px 0; }}
@@ -360,12 +394,12 @@ def generate_spatial_coverage_section(model, geodata_map):
         html += '                <div class="author">\n'
         if location_code and location_code in geodata_map:
             geoname_url = geodata_map[location_code]
-            html += f'                    <strong>Location:</strong> <a href="{geoname_url}" target="_blank">{location_name} ({location_code})</a><br>\n'
+            html += f'                    <a href="{geoname_url}" target="_blank">{location_name} ({location_code})</a><br>\n'
         elif location_code:
             search_link = f"https://www.geonames.org/search.html?q={location_name.replace(' ', '+')}"
-            html += f'                    <strong>Location:</strong> <a href="{search_link}" target="_blank">{location_name} ({location_code})</a><br>\n'
+            html += f'                    <a href="{search_link}" target="_blank">{location_name} ({location_code})</a><br>\n'
         else:
-            html += f'                    <strong>Location:</strong> {location_name}<br>\n'
+            html += f'                    {location_name}<br>\n'
         html += '                </div>\n'
 
     return html
@@ -387,7 +421,7 @@ def generate_output_types_section(model):
     html = ''
     for output_type in output_types:
         html += '                <div class="author">\n'
-        html += f'                    <strong>Type:</strong> {output_type}<br>\n'
+        html += f'                    {output_type}<br>\n'
         html += '                </div>\n'
 
     return html
@@ -401,7 +435,7 @@ def generate_age_groups_section(model):
     html = ''
     for age_group in model['workExample']['ageGroups']:
         html += '                <div class="author">\n'
-        html += f'                    <strong>Age Group:</strong> {age_group}<br>\n'
+        html += f'                    {age_group}<br>\n'
         html += '                </div>\n'
 
     return html
@@ -468,7 +502,6 @@ def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html):
     if has_targets:
         active_class = ' active' if first_tab == 'targets' else ''
         html += f'            <div class="tab-content{active_class}" id="model-{model_idx}-content-targets">\n'
-        label = "Target" if len(model['workExample']['variableMeasured']) == 1 else "Targets"
         html += '                <div class="variables-grid">\n'
         for variable in model['workExample']['variableMeasured']:
             html += '                    <div class="author">\n'
@@ -476,7 +509,7 @@ def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html):
             html += f'                        <strong>Unit:</strong> {variable.get("unitText", "N/A")}<br>\n'
             html += f'                        <strong>Target ID:</strong> {variable.get("target_id", "N/A")}<br>\n'
             html += f'                        <strong>Type:</strong> {variable.get("target_type", "N/A")}<br>\n'
-            html += f'                        <strong>Available Output Types:</strong> {format_available_output_types(variable)}<br>\n'
+            html += f'                        <strong>Available Output Types:</strong> <span class="no-wrap">{format_available_output_types(variable)}</span> '
             html += f'                        <strong>Temporal Unit:</strong> {variable.get("temporalUnit", "N/A")}<br>\n'
             if 'identifier' in variable:
                 html += f'                        <a href="{variable["identifier"]}" target="_blank">Ontology Reference</a><br>\n'
@@ -514,9 +547,9 @@ def generate_temporal_coverage_section(model):
         #remove time if present
         start_date = start_date.split(' ')[0]
         end_date = end_date.split(' ')[0]
-        return f'        <p>Temporal Coverage: <span class="location">{start_date}</span> to <span class="location">{end_date}</span></p>\n'
+        return f'        <p><strong>Temporal Coverage:</strong> <span class="location">{start_date}</span> to <span class="location">{end_date}</span></p>\n'
     else:
-        return f'        <p>Temporal Coverage: <span class="location">{temporal}</span></p>\n'
+        return f'        <p><strong>Temporal Coverage:</strong> <span class="location">{temporal}</span></p>\n'
 
 
 def parse_jsonld_to_html(jsonld_file, round_id):
@@ -615,6 +648,10 @@ def parse_jsonld_to_html(jsonld_file, round_id):
         html += generate_tabbed_section(model, idx, geodata_map, parquet_html)
 
         html += '    </div>\n'
+
+        # Add a separator between models for visual structure.
+        if idx < len(models) - 1:
+            html += '    <hr class="model-separator">\n'
 
     # Close HTML
     html += """</body>
