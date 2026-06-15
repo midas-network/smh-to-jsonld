@@ -28,7 +28,7 @@ def clean_output(output_dir: str = "output", rounds: list = None, dry_run: bool 
     Deletes:
     - output/round_<ID>*.jsonld  — consolidated round JSON-LD files
     - output/round_<ID>*.html    — consolidated round HTML files
-    - output/<YYYY-MM-DD>/       — per-round subdirectories (per-model JSON-LD + HTML)
+    - output/<YYYY-MM-DD>/       — per-round subdirectories (per-model JSON-LD)
 
     Args:
         output_dir: Path to the output directory (default: "output").

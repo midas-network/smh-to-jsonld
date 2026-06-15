@@ -76,3 +76,9 @@ class TestV5ConsolidatedRoster:
 
     def test_has_part_count_matches_number_of_items(self, consolidated_jsonld):
         assert consolidated_jsonld["numberOfItems"] == len(consolidated_jsonld["hasPart"])
+
+
+class TestV5RoundDirectoryOutput:
+    def test_duplicate_round_html_not_written_to_round_directory(self, v5_round_output):
+        path = v5_round_output / ROUND_ID / f"round_{ROUND_ID}_v5.1.0.html"
+        assert not path.exists(), f"Duplicate round HTML should not be produced at: {path}"

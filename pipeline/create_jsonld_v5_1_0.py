@@ -172,8 +172,6 @@ def process_single_round(round_dir, base_dir, metadata_subdir, output_dir):
         logging.info(f"Metadata directory '{metadata_dir_full}' not found for round {round_dir}. Skipping.")
         return []
 
-    # Prepare output directory
-    round_output_dir = prepare_round_output_directory(output_dir, round_dir)
     logging.debug(f"Processing round directory: {round_dir}")
 
     # Load configuration
@@ -187,6 +185,9 @@ def process_single_round(round_dir, base_dir, metadata_subdir, output_dir):
 
     for round_config in rounds:
         round_id = round_config.round_id
+
+        # Prepare a per-round output directory keyed by the actual round id.
+        round_output_dir = prepare_round_output_directory(output_dir, round_id)
 
         # Process metadata for this round
         round_results, global_field_values_dict, field_values_by_model = process_metadata_for_round(

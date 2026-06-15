@@ -25,7 +25,6 @@ from utils.model_output_smh import (
     get_output_file_types,
 )
 from utils.temporal import calculate_temporal_coverage
-from pipeline.jsonld_to_html import parse_jsonld_to_html
 
 SCHEMA_VERSION = "6.0.0"
 
@@ -449,18 +448,6 @@ def create_consolidated_round_jsonld_v6(round_output_dir, output_dir, round_id, 
     return output_path
 
 
-def create_round_html(round_jsonld_path, round_output_dir, round_id):
-    """Create round HTML summary inside the round output directory."""
-    html_path = Path(round_output_dir) / f"round_{round_id}_v{SCHEMA_VERSION}.html"
-    html_content = parse_jsonld_to_html(str(round_jsonld_path), round_id)
-
-    with open(html_path, "w", encoding="utf-8") as f:
-        f.write(html_content)
-
-    logging.info(f"Round HTML written to {html_path}")
-    return html_path
-
-
 def process_round(round_dir, output_dir):
     """Process a single round directory."""
     round_path = Path(round_dir)
@@ -501,10 +488,9 @@ def process_round(round_dir, output_dir):
         )
         results.append(result)
 
-    round_jsonld_path = create_consolidated_round_jsonld_v6(
+    create_consolidated_round_jsonld_v6(
         round_output_dir, output_dir, round_id, diseases
     )
-    create_round_html(round_jsonld_path, round_output_dir, round_id)
 
     return results
 

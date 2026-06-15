@@ -1,8 +1,7 @@
 """Integration tests: full v6 round generation for round 2025-07-27.
 
 These tests run process_round() against real data in data/2025-07-27/ and
-validate the produced artifacts (per-model JSON-LD, consolidated round JSON-LD,
-and HTML summary).
+validate the produced artifacts (per-model JSON-LD and consolidated round JSON-LD).
 
 Run with:
     pytest tests/test_jsonld_v6_integration.py -v
@@ -75,14 +74,6 @@ def jhu_jsonld(round_output):
     assert path.exists(), f"JHU model JSON-LD not produced at: {path}"
     with open(path) as f:
         return json.load(f)
-
-
-@pytest.fixture(scope="module")
-def html_content(round_output):
-    path = round_output / ROUND_ID / f"round_{ROUND_ID}_v6.0.0.html"
-    assert path.exists(), f"Round HTML not produced at: {path}"
-    with open(path, encoding="utf-8") as f:
-        return f.read()
 
 
 # ---------------------------------------------------------------------------
@@ -285,41 +276,16 @@ class TestPerModelJsonLD:
 
 
 # ---------------------------------------------------------------------------
-# Round HTML output
+# Round directory output
 # ---------------------------------------------------------------------------
 
 
-class TestRoundHTML:
-    """Validates that the round HTML file is well-formed and contains expected content."""
+class TestRoundDirectoryOutput:
+    """Validates that duplicate consolidated HTML is not written to the round directory."""
 
-    def test_has_doctype(self, html_content):
-        assert "<!DOCTYPE html>" in html_content
-
-    def test_has_html_tag(self, html_content):
-        assert "<html" in html_content
-
-    def test_has_body_tag(self, html_content):
-        assert "<body" in html_content
-
-    def test_has_closing_html_tag(self, html_content):
-        assert "</html>" in html_content
-
-    def test_has_model_index(self, html_content):
-        assert "Model Index" in html_content
-
-    def test_has_spatial_coverage_section(self, html_content):
-        assert "Spatial Coverage" in html_content
-
-    def test_targets_show_available_output_types(self, html_content):
-        assert "Available Output Types:" in html_content
-
-    def test_all_model_names_in_html(self, html_content):
-        for name in EXPECTED_MODEL_NAMES:
-            assert name in html_content, f"Model '{name}' missing from HTML output"
-
-    def test_reasonable_file_size(self, round_output):
+    def test_duplicate_round_html_not_written_to_round_directory(self, round_output):
         path = round_output / ROUND_ID / f"round_{ROUND_ID}_v6.0.0.html"
-        assert path.stat().st_size > 5_000, "HTML file seems too small — may be incomplete"
+        assert not path.exists(), f"Duplicate round HTML should not be produced at: {path}"
 
 
 # ---------------------------------------------------------------------------

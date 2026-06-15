@@ -78,7 +78,7 @@ def get_license_map():
         # Government / Other
         "OGL-3.0":      "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
     }
-
+    
 
 def generate_html_head(title):
     """Generate HTML head section with styles."""
