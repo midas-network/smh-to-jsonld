@@ -509,7 +509,7 @@ def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html):
             html += f'                        <strong>Unit:</strong> {variable.get("unitText", "N/A")}<br>\n'
             html += f'                        <strong>Target ID:</strong> {variable.get("target_id", "N/A")}<br>\n'
             html += f'                        <strong>Type:</strong> {variable.get("target_type", "N/A")}<br>\n'
-            html += f'                        <strong>Available Output Types:</strong> <span class="no-wrap">{format_available_output_types(variable)}</span> '
+            html += f'                        <strong>Available Output Types:</strong> <span class="no-wrap">{format_available_output_types(variable)}</span> <br>\n'
             html += f'                        <strong>Temporal Unit:</strong> {variable.get("temporalUnit", "N/A")}<br>\n'
             if 'identifier' in variable:
                 html += f'                        <a href="{variable["identifier"]}" target="_blank">Ontology Reference</a><br>\n'
