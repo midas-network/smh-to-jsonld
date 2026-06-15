@@ -198,6 +198,61 @@ def create_jsonld(rounds: List[str] = None) -> bool:
 
     all_success = True
 
+    def _collect_per_model_names(round_id: str) -> set:
+        round_output_dir = Path('output') / round_id
+        if not round_output_dir.exists():
+            return set()
+
+        return {
+            f.stem
+            for f in round_output_dir.glob('*.jsonld')
+            if not f.name.startswith('round_')
+        }
+
+    def _collect_consolidated_names(round_id: str) -> set:
+        consolidated_files = sorted(Path('output').glob(f'round_{round_id}_v*.jsonld'))
+        if not consolidated_files:
+            return set()
+
+        with open(consolidated_files[0], 'r') as f:
+            consolidated = json.load(f)
+
+        return {
+            part.get('name')
+            for part in consolidated.get('hasPart', [])
+            if part.get('name')
+        }
+
+    def _validate_round_model_consistency(round_id: str) -> bool:
+        per_model_names = _collect_per_model_names(round_id)
+        consolidated_names = _collect_consolidated_names(round_id)
+
+        if not per_model_names:
+            print_error(f"Round {round_id}: no per-model JSON-LD files found in output/{round_id}/")
+            return False
+
+        if not consolidated_names:
+            print_error(f"Round {round_id}: no consolidated round JSON-LD file found in output/")
+            return False
+
+        if per_model_names != consolidated_names:
+            missing_in_consolidated = sorted(per_model_names - consolidated_names)
+            extra_in_consolidated = sorted(consolidated_names - per_model_names)
+
+            print_error(
+                f"Round {round_id}: model roster mismatch between per-model and consolidated JSON-LD outputs"
+            )
+            if missing_in_consolidated:
+                print_error(f"  Missing in consolidated: {', '.join(missing_in_consolidated)}")
+            if extra_in_consolidated:
+                print_error(f"  Extra in consolidated: {', '.join(extra_in_consolidated)}")
+            return False
+
+        print_success(
+            f"Round {round_id}: validated model roster consistency ({len(per_model_names)} models)"
+        )
+        return True
+
     for round_dir in all_round_dirs:
         schema_ver = get_schema_version_from_dir(round_dir)
         major = schema_ver.split('.')[0] if schema_ver != 'unknown' else '0'
@@ -218,6 +273,10 @@ def create_jsonld(rounds: List[str] = None) -> bool:
         success, _, _ = run_command(cmd, description)
         if not success:
             print_error(f"Failed to create JSON-LD for round {round_dir.name}")
+            all_success = False
+            continue
+
+        if not _validate_round_model_consistency(round_dir.name):
             all_success = False
 
     if all_success:
