@@ -77,6 +77,21 @@ class TestV5ConsolidatedRoster:
     def test_has_part_count_matches_number_of_items(self, consolidated_jsonld):
         assert consolidated_jsonld["numberOfItems"] == len(consolidated_jsonld["hasPart"])
 
+    def test_all_parts_have_non_empty_encoding_format(self, consolidated_jsonld):
+        for part in consolidated_jsonld["hasPart"]:
+            formats = part["workExample"].get("encodingFormat")
+            assert formats, f"encodingFormat missing or empty for {part['name']}"
+
+    def test_all_parts_have_parquet_encoding_format(self, consolidated_jsonld):
+        for part in consolidated_jsonld["hasPart"]:
+            format_names = {
+                file_format.get("name")
+                for file_format in part["workExample"].get("encodingFormat", [])
+            }
+            assert "Apache Parquet" in format_names, (
+                f"Apache Parquet encodingFormat missing for {part['name']}"
+            )
+
 
 class TestV5RoundDirectoryOutput:
     def test_duplicate_round_html_not_written_to_round_directory(self, v5_round_output):

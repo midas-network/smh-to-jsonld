@@ -200,16 +200,18 @@ def add_file_formats(jsonld_data, file_types):
     if not file_types:
         return
 
-    jsonld_data["workExample"]["encodingFormat"] = []
-
+    encoding_formats = []
     if file_types.get("parquet", 0) > 0 or file_types.get("gz.parquet", 0) > 0:
-        jsonld_data["workExample"]["encodingFormat"].append(
+        encoding_formats.append(
             {
                 "@type": "FileFormat",
                 "name": "Apache Parquet",
                 "fileExtension": ".parquet",
             }
         )
+
+    if encoding_formats:
+        jsonld_data["workExample"]["encodingFormat"] = encoding_formats
 
 
 def add_spatial_coverage(jsonld_data, locations):

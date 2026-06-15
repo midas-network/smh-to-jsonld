@@ -274,6 +274,21 @@ class TestPerModelJsonLD:
         names = [f.get("name") for f in formats]
         assert "Apache Parquet" in names
 
+    def test_all_parts_have_non_empty_encoding_format(self, consolidated_jsonld):
+        for part in consolidated_jsonld["hasPart"]:
+            formats = part["workExample"].get("encodingFormat")
+            assert formats, f"encodingFormat missing or empty for {part['name']}"
+
+    def test_all_parts_have_parquet_encoding_format(self, consolidated_jsonld):
+        for part in consolidated_jsonld["hasPart"]:
+            format_names = {
+                file_format.get("name")
+                for file_format in part["workExample"].get("encodingFormat", [])
+            }
+            assert "Apache Parquet" in format_names, (
+                f"Apache Parquet encodingFormat missing for {part['name']}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # Round directory output
