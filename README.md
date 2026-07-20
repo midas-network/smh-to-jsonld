@@ -92,6 +92,9 @@ The scripts will:
   `additional_metadata.round_name` is present, spaces are replaced with
   underscores (e.g. `output/Round_1_-_2025-2026_v6.0.0.jsonld`). Otherwise,
   filenames fall back to `round_<ROUND_ID>_v<SCHEMA_VERSION>.jsonld`.
+- Add scenario/round definition links when `additional_metadata.internal_round_name`
+  is present. These point to the hub repository markdown file, e.g.
+  `https://github.com/midas-network/rsv-scenario-modeling-hub/blob/main/auxiliary-data/rounds/round3.md`.
 
 ### 3. Generate HTML Visualization
 

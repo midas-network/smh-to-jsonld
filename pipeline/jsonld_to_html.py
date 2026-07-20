@@ -252,11 +252,26 @@ def generate_html_head(title):
 
 def generate_header_section(data):
     """Generate the header section with dataset information."""
-    return f"""    <h1>{data.get('name', 'Dataset')}</h1>
+    html = f"""    <h1>{data.get('name', 'Dataset')}</h1>
     <p class="metadata"><strong>Description:</strong> {data.get('description', 'N/A')}</p>
     <p class="metadata"><strong>Identifier:</strong> {data.get('identifier', 'N/A')}</p>
     <p class="metadata"><strong>Number of Models:</strong> {data.get('numberOfItems', 0)}</p>
 """
+
+    documentation = data.get("subjectOf") if isinstance(data.get("subjectOf"), dict) else {}
+    documentation_url = documentation.get("url") or data.get("url")
+    raw_url = documentation.get("sameAs") or data.get("sameAs")
+
+    if documentation_url:
+        html += (
+            '    <p class="metadata"><strong>Scenario/Round Definition:</strong> '
+            f'<a href="{documentation_url}" target="_blank">{documentation_url}</a>'
+        )
+        if raw_url:
+            html += f' (<a href="{raw_url}" target="_blank">raw markdown</a>)'
+        html += '</p>\n'
+
+    return html
 
 
 def generate_model_index(models):
@@ -740,4 +755,3 @@ Examples:
 
 if __name__ == '__main__':
     main()
-

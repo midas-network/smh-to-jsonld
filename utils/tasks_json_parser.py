@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
+from utils.jsonld import build_round_documentation
+
 
 @dataclass
 class TaskIdConfig:
@@ -57,6 +59,8 @@ class Round:
     submissions_due: Dict[str, str]
     diseases: List[Disease]  # New field for disease information
     round_name: Optional[str] = None
+    internal_round_name: Optional[str] = None
+    round_documentation: Optional[Dict[str, str]] = None
 
 
 
@@ -80,6 +84,7 @@ class TasksConfig:
                 data = json.load(f)
 
             self.schema_version = data.get("schema_version")
+            github_repo = self._load_github_repo()
 
             # Parse rounds
             for round_data in data.get("rounds", []):
@@ -142,6 +147,13 @@ class TasksConfig:
                 round_dict["round_name"] = (
                     additional_metadata.get("round_name") or round_data.get("round_name")
                 )
+                round_dict["internal_round_name"] = (
+                    additional_metadata.get("internal_round_name")
+                    or round_data.get("internal_round_name")
+                )
+                round_dict["round_documentation"] = build_round_documentation(
+                    github_repo, round_dict["internal_round_name"]
+                )
 
                 round_dict["round_id_from_variable"] = round_data.get("round_id_from_variable")
 
@@ -168,10 +180,32 @@ class TasksConfig:
                     diseases=diseases,
                     submissions_due=round_dict["submissions_due"],
                     round_name=round_dict["round_name"],
+                    internal_round_name=round_dict["internal_round_name"],
+                    round_documentation=round_dict["round_documentation"],
                 ))
 
         except Exception as e:
             raise ValueError(f"Error parsing tasks config: {str(e)}")
+
+    def _load_github_repo(self) -> Optional[str]:
+        """Read owner/name from sibling admin.json when available."""
+        admin_path = Path(self.file_path).with_name("admin.json")
+        if not admin_path.exists():
+            return None
+
+        try:
+            with open(admin_path, 'r') as f:
+                data = json.load(f)
+        except Exception:
+            return None
+
+        repository = data.get("repository") or {}
+        owner = repository.get("owner")
+        name = repository.get("name")
+        if owner and name:
+            return f"{owner}/{name}"
+
+        return None
 
     def get_all_rounds(self) -> List[Round]:
         """Get all rounds from the configuration."""

@@ -20,6 +20,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
 ROUND_ID = "2025-07-27"
+ROUND_NAME = "Round 1 - 2025-2026"
+ROUND_OUTPUT_STEM = "Round_1_-_2025-2026"
 SNAPSHOT_PATH = REPO_ROOT / "tests" / "snapshots" / "round_2025-07-27_key_fields.json"
 
 # Stable ordered list of model names inferred from data/2025-07-27/model-metadata/
@@ -62,7 +64,7 @@ def round_output(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def consolidated_jsonld(round_output):
-    path = round_output / f"round_{ROUND_ID}_v6.0.0.jsonld"
+    path = round_output / f"{ROUND_OUTPUT_STEM}_v6.0.0.jsonld"
     assert path.exists(), f"Consolidated round JSON-LD not produced at: {path}"
     with open(path) as f:
         return json.load(f)
@@ -90,8 +92,8 @@ class TestConsolidatedRoundJsonLD:
     def test_type_is_dataset(self, consolidated_jsonld):
         assert consolidated_jsonld["@type"] == "Dataset"
 
-    def test_name_contains_round_id(self, consolidated_jsonld):
-        assert ROUND_ID in consolidated_jsonld["name"]
+    def test_name_contains_round_name(self, consolidated_jsonld):
+        assert ROUND_NAME in consolidated_jsonld["name"]
 
     def test_identifier_is_round_id(self, consolidated_jsonld):
         assert consolidated_jsonld["identifier"] == ROUND_ID
@@ -136,6 +138,16 @@ class TestConsolidatedRoundJsonLD:
         we_type = consolidated_jsonld["workExample"]["@type"]
         assert isinstance(we_type, list)
         assert "https://midasnetwork.us/ontology/class-datasetsmidas97.html" in we_type
+
+    def test_round_documentation_link(self, consolidated_jsonld):
+        assert consolidated_jsonld["url"] == (
+            "https://github.com/midas-network/rsv-scenario-modeling-hub/"
+            "blob/main/auxiliary-data/rounds/round3.md"
+        )
+        assert consolidated_jsonld["sameAs"] == (
+            "https://raw.githubusercontent.com/midas-network/rsv-scenario-modeling-hub/"
+            "refs/heads/main/auxiliary-data/rounds/round3.md"
+        )
 
     def test_all_parts_have_non_empty_variable_measured(self, consolidated_jsonld):
         for part in consolidated_jsonld["hasPart"]:
@@ -187,7 +199,7 @@ class TestConsolidatedRoundJsonLD:
             assert entry["identifier"] == "http://purl.obolibrary.org/obo/APOLLO_SV_00000645"
             assert entry["alternateName"] == "incident hospitalization count"
             assert entry["unitText"] == "count"
-            assert entry["target_type"] == "discrete"
+            assert entry["target_type"] == "continuous"
             assert entry["target_keys"] == {"target": "inc hosp"}
             assert sorted(entry["available_output_types"]) == ["quantile", "sample"]
             assert entry["temporalUnit"] == "week"
@@ -256,6 +268,10 @@ class TestPerModelJsonLD:
     def test_jhu_work_example_round_info(self, jhu_jsonld):
         is_part_of = jhu_jsonld["workExample"].get("isPartOf", {})
         assert is_part_of.get("identifier") == ROUND_ID
+        assert is_part_of.get("url") == (
+            "https://github.com/midas-network/rsv-scenario-modeling-hub/"
+            "blob/main/auxiliary-data/rounds/round3.md"
+        )
 
     def test_jhu_work_example_has_temporal_coverage(self, jhu_jsonld):
         we = jhu_jsonld.get("workExample", {})

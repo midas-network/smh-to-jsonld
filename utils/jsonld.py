@@ -10,6 +10,9 @@ from utils.model_output_smh import get_output_file_types
 from utils.tasks_smh import get_targets
 from utils.temporal import calculate_temporal_coverage
 
+ROUND_DEFINITION_BRANCH = "main"
+ROUND_DEFINITION_FOLDER = "auxiliary-data/rounds"
+
 
 def initialize_work_example(jsonld_data):
     """Ensure workExample exists in the JSON-LD data."""
@@ -36,6 +39,56 @@ def format_round_filename_stem(round_id, round_name=None):
         if display_name:
             return display_name.replace(" ", "_").replace("/", "_")
     return f"round_{round_id}"
+
+
+def build_round_documentation(github_repo, internal_round_name):
+    """Build GitHub and raw markdown URLs for a round definition."""
+    if not github_repo or not internal_round_name:
+        return None
+
+    repo = str(github_repo).strip().removeprefix("https://github.com/")
+    repo = repo.removesuffix(".git").strip("/")
+    internal_name = str(internal_round_name).strip().removesuffix(".md")
+
+    if not repo or not internal_name:
+        return None
+
+    doc_path = f"{ROUND_DEFINITION_FOLDER}/{internal_name}.md"
+    return {
+        "url": f"https://github.com/{repo}/blob/{ROUND_DEFINITION_BRANCH}/{doc_path}",
+        "rawUrl": (
+            f"https://raw.githubusercontent.com/{repo}/refs/heads/"
+            f"{ROUND_DEFINITION_BRANCH}/{doc_path}"
+        ),
+    }
+
+
+def apply_round_documentation(jsonld_data, round_documentation):
+    """Attach round/scenario documentation links to a JSON-LD object."""
+    if not round_documentation:
+        return
+
+    url = round_documentation.get("url")
+    raw_url = round_documentation.get("rawUrl")
+    if not url and not raw_url:
+        return
+
+    if url:
+        jsonld_data["url"] = url
+    if raw_url:
+        jsonld_data["sameAs"] = raw_url
+
+    documentation = {
+        "@type": "CreativeWork",
+        "name": "Scenario/round definition",
+        "encodingFormat": "text/markdown",
+    }
+    if url:
+        documentation["url"] = url
+    if raw_url:
+        documentation["sameAs"] = raw_url
+
+    jsonld_data["subjectOf"] = documentation
 
 
 def get_consolidated_round_id(jsonld_data):
@@ -85,13 +138,27 @@ def get_configured_round_name(config, round_id):
     return getattr(round_config, "round_name", None)
 
 
-def add_round_info(jsonld_data, round_id, round_name=None):
+def get_configured_round_documentation(config, round_id):
+    """Return configured round documentation links when available."""
+    if not hasattr(config, "get_round_by_id"):
+        return None
+
+    round_config = config.get_round_by_id(round_id)
+    if round_config is None:
+        return None
+
+    return getattr(round_config, "round_documentation", None)
+
+
+def add_round_info(jsonld_data, round_id, round_name=None, round_documentation=None):
     """Add round information to the workExample."""
-    jsonld_data["workExample"]["isPartOf"] = {
+    is_part_of = {
         "@type": "Event",
         "name": format_round_name(round_id, round_name),
         "identifier": round_id
     }
+    apply_round_documentation(is_part_of, round_documentation)
+    jsonld_data["workExample"]["isPartOf"] = is_part_of
 
 
 def add_file_formats(jsonld_data, file_types):
@@ -157,7 +224,12 @@ def enrich_jsonld_with_model_output(jsonld_data, round_id, model_name, config, d
 
     # Initialize and populate workExample
     initialize_work_example(jsonld_data)
-    add_round_info(jsonld_data, round_id, get_configured_round_name(config, round_id))
+    add_round_info(
+        jsonld_data,
+        round_id,
+        get_configured_round_name(config, round_id),
+        get_configured_round_documentation(config, round_id),
+    )
 
     jsonld_data["workExample"]["output_type"] = [output_types]
 
@@ -273,6 +345,7 @@ def create_consolidated_round_jsonld(round_output_dir, round_id, config, global_
     # Get all JSON-LD files in the round output directory
     jsonld_files = [f for f in os.listdir(round_output_dir) if f.endswith('.jsonld') and not f.startswith('round_')]
     round_name = get_configured_round_name(config, round_id)
+    round_documentation = get_configured_round_documentation(config, round_id)
     display_round_name = format_round_name(round_id, round_name)
 
     # Create the basic structure for the consolidated JSON-LD
@@ -299,6 +372,7 @@ def create_consolidated_round_jsonld(round_output_dir, round_id, config, global_
                 }
 
     consolidated["roundId"] = round_id
+    apply_round_documentation(consolidated, round_documentation)
 
 
 

@@ -15,7 +15,9 @@ import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
 ROUND_ID = "2023-11-12"
+ROUND_OUTPUT_STEM = "Round_1_-_2023-2024"
 ROUND_ID_WITH_HISTORICAL_CONFIG = "2024-07-28"
+ROUND_OUTPUT_STEM_WITH_HISTORICAL_CONFIG = "Round_1_-_2024-2025"
 EXPECTED_MODEL_NAMES = sorted(
     [
         "CEPH-MetaRSV",
@@ -61,7 +63,7 @@ def v5_round_output(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def consolidated_jsonld(v5_round_output):
-    path = v5_round_output / f"round_{ROUND_ID}_v5.1.0.jsonld"
+    path = v5_round_output / f"{ROUND_OUTPUT_STEM}_v5.1.0.jsonld"
     assert path.exists(), f"Consolidated round JSON-LD not produced at: {path}"
     with open(path) as f:
         return json.load(f)
@@ -114,6 +116,16 @@ class TestV5ConsolidatedRoster:
                 f"Apache Parquet encodingFormat missing for {part['name']}"
             )
 
+    def test_round_documentation_link(self, consolidated_jsonld):
+        assert consolidated_jsonld["url"] == (
+            "https://github.com/midas-network/rsv-scenario-modeling-hub/"
+            "blob/main/auxiliary-data/rounds/round1.md"
+        )
+        assert consolidated_jsonld["sameAs"] == (
+            "https://raw.githubusercontent.com/midas-network/rsv-scenario-modeling-hub/"
+            "refs/heads/main/auxiliary-data/rounds/round1.md"
+        )
+
 
 class TestV5RoundDirectoryOutput:
     def test_duplicate_round_html_not_written_to_round_directory(self, v5_round_output):
@@ -124,10 +136,10 @@ class TestV5RoundDirectoryOutput:
 class TestV5SingleRoundSelection:
     def test_2024_round_does_not_emit_2023_outputs(self, v5_2024_round_output):
         historical_round_dir = v5_2024_round_output / ROUND_ID
-        historical_round_jsonld = v5_2024_round_output / f"round_{ROUND_ID}_v5.1.0.jsonld"
+        historical_round_jsonld = v5_2024_round_output / f"{ROUND_OUTPUT_STEM}_v5.1.0.jsonld"
         requested_round_dir = v5_2024_round_output / ROUND_ID_WITH_HISTORICAL_CONFIG
         requested_round_jsonld = (
-            v5_2024_round_output / f"round_{ROUND_ID_WITH_HISTORICAL_CONFIG}_v5.1.0.jsonld"
+            v5_2024_round_output / f"{ROUND_OUTPUT_STEM_WITH_HISTORICAL_CONFIG}_v5.1.0.jsonld"
         )
 
         assert not historical_round_dir.exists()

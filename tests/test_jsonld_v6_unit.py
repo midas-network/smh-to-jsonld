@@ -11,6 +11,7 @@ from pipeline.create_jsonld_v6_0_0 import (
     _extract_round_id,
     add_round_info,
     extract_diseases,
+    extract_internal_round_name,
     extract_round_name,
     extract_target_metadata,
     build_target_objects,
@@ -166,6 +167,14 @@ class TestRoundNames:
         jsonld_data = {"workExample": {}}
         add_round_info(jsonld_data, "2025-07-27")
         assert jsonld_data["workExample"]["isPartOf"]["name"] == "Round 2025-07-27"
+
+    def test_extract_internal_round_name_from_additional_metadata(self):
+        round_config = {
+            "additional_metadata": {
+                "internal_round_name": "round3",
+            }
+        }
+        assert extract_internal_round_name(round_config) == "round3"
 
 
 # ---------------------------------------------------------------------------
