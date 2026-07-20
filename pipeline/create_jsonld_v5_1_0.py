@@ -179,35 +179,39 @@ def process_single_round(round_dir, base_dir, metadata_subdir, output_dir):
     if config is None:
         return []
 
-    # Process all rounds in the config
     metadata_results = []
-    rounds = config.get_all_rounds()
-
-    for round_config in rounds:
-        round_id = round_config.round_id
-
-        # Prepare a per-round output directory keyed by the actual round id.
-        round_output_dir = prepare_round_output_directory(output_dir, round_id)
-
-        # Process metadata for this round
-        round_results, global_field_values_dict, field_values_by_model = process_metadata_for_round(
-            round_id, metadata_dir_full, round_output_dir, config
+    round_config = config.get_round_by_id(round_dir)
+    if round_config is None:
+        available_rounds = [r.round_id for r in config.get_all_rounds()]
+        raise ValueError(
+            f"Round '{round_dir}' was not found in {os.path.join(round_path, 'hub-config', 'tasks.json')}. "
+            f"Available round ids: {', '.join(available_rounds) if available_rounds else 'none'}"
         )
 
-        metadata_results.extend(round_results)
+    round_id = round_config.round_id
 
-        logging.info(
-            f"Completed processing round {round_id} from directory {round_dir}: "
-            f"{len(round_results)} models processed"
-        )
+    # Prepare a per-round output directory keyed by the actual round id.
+    round_output_dir = prepare_round_output_directory(output_dir, round_id)
 
-        # Create consolidated JSON-LD for the round (versioned filename)
-        create_consolidated_round_jsonld(
-            round_output_dir, round_id, config,
-            global_field_values_dict, field_values_by_model,
-            output_dir=output_dir,
-            schema_version=SCHEMA_VERSION,
-        )
+    # Process metadata for this round
+    round_results, global_field_values_dict, field_values_by_model = process_metadata_for_round(
+        round_id, metadata_dir_full, round_output_dir, config
+    )
+
+    metadata_results.extend(round_results)
+
+    logging.info(
+        f"Completed processing round {round_id} from directory {round_dir}: "
+        f"{len(round_results)} models processed"
+    )
+
+    # Create consolidated JSON-LD for the round (versioned filename)
+    create_consolidated_round_jsonld(
+        round_output_dir, round_id, config,
+        global_field_values_dict, field_values_by_model,
+        output_dir=output_dir,
+        schema_version=SCHEMA_VERSION,
+    )
 
     return metadata_results
 

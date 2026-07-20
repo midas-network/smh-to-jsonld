@@ -15,6 +15,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).parent.parent
 ROUND_ID = "2023-11-12"
+ROUND_ID_WITH_HISTORICAL_CONFIG = "2024-07-28"
 EXPECTED_MODEL_NAMES = sorted(
     [
         "CEPH-MetaRSV",
@@ -66,6 +67,27 @@ def consolidated_jsonld(v5_round_output):
         return json.load(f)
 
 
+@pytest.fixture(scope="module")
+def v5_2024_round_output(tmp_path_factory):
+    """Run v5 JSON-LD generation for a round whose tasks.json includes older rounds."""
+    from pipeline.create_jsonld_v5_1_0 import process_single_round
+
+    out = tmp_path_factory.mktemp("v5_2024_output")
+    original_cwd = os.getcwd()
+    os.chdir(REPO_ROOT)
+    try:
+        process_single_round(
+            round_dir=ROUND_ID_WITH_HISTORICAL_CONFIG,
+            base_dir=str(REPO_ROOT / "data"),
+            metadata_subdir="model-metadata",
+            output_dir=str(out),
+        )
+    finally:
+        os.chdir(original_cwd)
+
+    return out
+
+
 class TestV5ConsolidatedRoster:
     def test_expected_number_of_models(self, consolidated_jsonld):
         assert consolidated_jsonld["numberOfItems"] == len(EXPECTED_MODEL_NAMES)
@@ -97,3 +119,18 @@ class TestV5RoundDirectoryOutput:
     def test_duplicate_round_html_not_written_to_round_directory(self, v5_round_output):
         path = v5_round_output / ROUND_ID / f"round_{ROUND_ID}_v5.1.0.html"
         assert not path.exists(), f"Duplicate round HTML should not be produced at: {path}"
+
+
+class TestV5SingleRoundSelection:
+    def test_2024_round_does_not_emit_2023_outputs(self, v5_2024_round_output):
+        historical_round_dir = v5_2024_round_output / ROUND_ID
+        historical_round_jsonld = v5_2024_round_output / f"round_{ROUND_ID}_v5.1.0.jsonld"
+        requested_round_dir = v5_2024_round_output / ROUND_ID_WITH_HISTORICAL_CONFIG
+        requested_round_jsonld = (
+            v5_2024_round_output / f"round_{ROUND_ID_WITH_HISTORICAL_CONFIG}_v5.1.0.jsonld"
+        )
+
+        assert not historical_round_dir.exists()
+        assert not historical_round_jsonld.exists()
+        assert requested_round_dir.exists()
+        assert requested_round_jsonld.exists()
