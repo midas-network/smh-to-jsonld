@@ -88,8 +88,10 @@ Options:
 The scripts will:
 - Process all model outputs for the round
 - Extract metadata including age groups, locations, and output types
-- Generate consolidated JSON-LD files named `round_<ROUND_ID>_v<SCHEMA_VERSION>.jsonld`
-  in the `output` directory (e.g. `output/round_2025-07-27_v6.0.0.jsonld`)
+- Generate consolidated JSON-LD files in the `output` directory. When
+  `additional_metadata.round_name` is present, spaces are replaced with
+  underscores (e.g. `output/Round_1_-_2025-2026_v6.0.0.jsonld`). Otherwise,
+  filenames fall back to `round_<ROUND_ID>_v<SCHEMA_VERSION>.jsonld`.
 
 ### 3. Generate HTML Visualization
 

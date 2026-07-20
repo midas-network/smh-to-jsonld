@@ -9,7 +9,9 @@ import pandas as pd
 
 from pipeline.create_jsonld_v6_0_0 import (
     _extract_round_id,
+    add_round_info,
     extract_diseases,
+    extract_round_name,
     extract_target_metadata,
     build_target_objects,
     merge_field_values,
@@ -129,6 +131,41 @@ class TestExtractDiseases:
         }
         result = extract_diseases(round_config)
         assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# round names
+# ---------------------------------------------------------------------------
+
+
+class TestRoundNames:
+    """Tests for reading and writing human-readable round names."""
+
+    def test_extract_round_name_from_additional_metadata(self):
+        round_config = {
+            "additional_metadata": {
+                "round_name": "Round 1 - 2025-2026",
+            }
+        }
+        assert extract_round_name(round_config) == "Round 1 - 2025-2026"
+
+    def test_extract_round_name_falls_back_to_top_level(self):
+        round_config = {"round_name": "Round 2 - 2025-2026"}
+        assert extract_round_name(round_config) == "Round 2 - 2025-2026"
+
+    def test_add_round_info_uses_configured_round_name(self):
+        jsonld_data = {"workExample": {}}
+        add_round_info(jsonld_data, "2025-07-27", "Round 1 - 2025-2026")
+        assert jsonld_data["workExample"]["isPartOf"] == {
+            "@type": "Event",
+            "name": "Round 1 - 2025-2026",
+            "identifier": "2025-07-27",
+        }
+
+    def test_add_round_info_falls_back_to_round_id_label(self):
+        jsonld_data = {"workExample": {}}
+        add_round_info(jsonld_data, "2025-07-27")
+        assert jsonld_data["workExample"]["isPartOf"]["name"] == "Round 2025-07-27"
 
 
 # ---------------------------------------------------------------------------

@@ -16,7 +16,12 @@ from pathlib import Path
 # Add parent directory to path to allow imports from utils
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from utils.jsonld import yaml_to_jsonld
+from utils.jsonld import (
+    format_round_filename_stem,
+    format_round_name,
+    remove_existing_consolidated_outputs,
+    yaml_to_jsonld,
+)
 from utils.location import get_location_info
 from utils.loggings import setup_logging
 from utils.model_output_smh import (
@@ -177,6 +182,12 @@ def extract_diseases(round_config):
     return round_config.get("disease", [])
 
 
+def extract_round_name(round_config):
+    """Extract the configured human-readable round name if one is present."""
+    additional_metadata = round_config.get("additional_metadata") or {}
+    return additional_metadata.get("round_name") or round_config.get("round_name")
+
+
 def initialize_work_example(jsonld_data):
     """Ensure workExample exists in the JSON-LD data."""
     if "workExample" not in jsonld_data:
@@ -186,11 +197,11 @@ def initialize_work_example(jsonld_data):
         }
 
 
-def add_round_info(jsonld_data, round_id):
+def add_round_info(jsonld_data, round_id, round_name=None):
     """Add round information to the workExample."""
     jsonld_data["workExample"]["isPartOf"] = {
         "@type": "Event",
-        "name": f"Round {round_id}",
+        "name": format_round_name(round_id, round_name),
         "identifier": round_id,
     }
 
@@ -296,6 +307,7 @@ def safe_temporal_coverage(distinct_field_values):
 def enrich_jsonld_with_model_output_v6(
     jsonld_data,
     round_id,
+    round_name,
     model_name,
     round_path,
     target_metadata,
@@ -316,7 +328,7 @@ def enrich_jsonld_with_model_output_v6(
     )
 
     initialize_work_example(jsonld_data)
-    add_round_info(jsonld_data, round_id)
+    add_round_info(jsonld_data, round_id, round_name)
     jsonld_data["workExample"]["output_type"] = [output_types]
 
     add_file_formats(jsonld_data, file_types)
@@ -335,6 +347,7 @@ def enrich_jsonld_with_model_output_v6(
 def process_single_model(
     yaml_file,
     round_id,
+    round_name,
     round_path,
     metadata_dir,
     round_output_dir,
@@ -361,6 +374,7 @@ def process_single_model(
             enrich_jsonld_with_model_output_v6(
                 jsonld_data,
                 round_id,
+                round_name,
                 model_name,
                 round_path,
                 target_metadata,
@@ -383,9 +397,10 @@ def process_single_model(
     }
 
 
-def create_consolidated_round_jsonld_v6(round_output_dir, output_dir, round_id, diseases):
+def create_consolidated_round_jsonld_v6(round_output_dir, output_dir, round_id, round_name, diseases):
     """Create a consolidated round-level JSON-LD for all model JSON-LD files."""
     logging.info(f"Creating consolidated JSON-LD for round {round_id}...")
+    display_round_name = format_round_name(round_id, round_name)
 
     jsonld_files = sorted(
         f
@@ -396,7 +411,7 @@ def create_consolidated_round_jsonld_v6(round_output_dir, output_dir, round_id, 
     consolidated = {
         "@context": "https://schema.org/",
         "@type": "Dataset",
-        "name": f"Round {round_id} Scenario Projection Models Collection",
+        "name": f"{display_round_name} Scenario Projection Models Collection",
         "description": f"Collection of model output from round {round_id}",
         "identifier": round_id,
         "roundId": round_id,
@@ -438,7 +453,9 @@ def create_consolidated_round_jsonld_v6(round_output_dir, output_dir, round_id, 
 
     consolidated["numberOfItems"] = len(consolidated["hasPart"])
 
-    output_path = Path(output_dir) / f"round_{round_id}_v{SCHEMA_VERSION}.jsonld"
+    output_stem = format_round_filename_stem(round_id, round_name)
+    output_path = Path(output_dir) / f"{output_stem}_v{SCHEMA_VERSION}.jsonld"
+    remove_existing_consolidated_outputs(output_dir, round_id)
     with open(output_path, "w") as f:
         json.dump(consolidated, f, indent=2)
 
@@ -469,6 +486,7 @@ def process_round(round_dir, output_dir):
     _, round_config = load_tasks_and_round_config(round_path, round_id)
     target_metadata = extract_target_metadata(round_config)
     diseases = extract_diseases(round_config)
+    round_name = extract_round_name(round_config)
 
     round_output_dir = prepare_round_output_directory(output_dir, round_id)
     yaml_files = find_yaml_files(metadata_dir)
@@ -481,6 +499,7 @@ def process_round(round_dir, output_dir):
         result = process_single_model(
             yaml_file,
             round_id,
+            round_name,
             round_path,
             metadata_dir,
             round_output_dir,
@@ -491,7 +510,7 @@ def process_round(round_dir, output_dir):
         results.append(result)
 
     create_consolidated_round_jsonld_v6(
-        round_output_dir, output_dir, round_id, diseases
+        round_output_dir, output_dir, round_id, round_name, diseases
     )
 
     return results

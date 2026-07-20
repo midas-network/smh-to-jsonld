@@ -56,6 +56,7 @@ class Round:
     model_tasks: List[ModelTask]
     submissions_due: Dict[str, str]
     diseases: List[Disease]  # New field for disease information
+    round_name: Optional[str] = None
 
 
 
@@ -137,6 +138,10 @@ class TasksConfig:
                 round_dict["model_tasks"] = model_tasks
                 round_dict["submissions_due"] = round_data.get("submissions_due", {})
                 round_dict["diseases"] = diseases
+                additional_metadata = round_data.get("additional_metadata", {}) or {}
+                round_dict["round_name"] = (
+                    additional_metadata.get("round_name") or round_data.get("round_name")
+                )
 
                 round_dict["round_id_from_variable"] = round_data.get("round_id_from_variable")
 
@@ -161,7 +166,8 @@ class TasksConfig:
                     round_id_from_variable=round_dict["round_id_from_variable"],
                     model_tasks=model_tasks,
                     diseases=diseases,
-                    submissions_due=round_dict["submissions_due"]
+                    submissions_due=round_dict["submissions_due"],
+                    round_name=round_dict["round_name"],
                 ))
 
         except Exception as e:

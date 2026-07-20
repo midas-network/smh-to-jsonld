@@ -16,6 +16,7 @@ Usage:
 """
 
 import argparse
+import json
 import re
 import shutil
 import sys
@@ -26,8 +27,8 @@ def clean_output(output_dir: str = "output", rounds: list = None, dry_run: bool 
     """Remove generated pipeline output files.
 
     Deletes:
-    - output/round_<ID>*.jsonld  — consolidated round JSON-LD files
-    - output/round_<ID>*.html    — consolidated round HTML files
+    - output/*.jsonld            — consolidated round JSON-LD files
+    - output/*.html              — consolidated round HTML files
     - output/<YYYY-MM-DD>/       — per-round subdirectories (per-model JSON-LD)
 
     Args:
@@ -48,27 +49,60 @@ def clean_output(output_dir: str = "output", rounds: list = None, dry_run: bool 
     deleted = []
     errors = []
 
+    def _read_round_id(jsonld_file: Path) -> str:
+        try:
+            with open(jsonld_file, "r") as f:
+                data = json.load(f)
+        except Exception:
+            return ""
+
+        if not isinstance(data.get("hasPart"), list):
+            return ""
+
+        round_id = data.get("roundId") or data.get("identifier")
+        return str(round_id) if round_id else ""
+
     def _matches_round(name: str) -> bool:
         """Return True if the name belongs to one of the requested rounds (or all rounds)."""
         if rounds is None:
             return True
         return any(r in name for r in rounds)
 
-    # --- Consolidated round files (output/round_*.jsonld, output/round_*.html) ---
-    for pattern in ("round_*.jsonld", "round_*.html"):
-        for f in sorted(output_path.glob(pattern)):
-            if not _matches_round(f.name):
-                continue
-            if dry_run:
-                print(f"  [dry-run] would delete: {f}")
-            else:
-                try:
-                    f.unlink()
-                    print(f"  deleted: {f}")
-                    deleted.append(f)
-                except OSError as exc:
-                    print(f"  ERROR deleting {f}: {exc}", file=sys.stderr)
-                    errors.append(f)
+    jsonld_files = sorted(output_path.glob("*.jsonld"))
+    matched_jsonld_stems = {
+        f.stem
+        for f in jsonld_files
+        if rounds is None or _read_round_id(f) in rounds or _matches_round(f.name)
+    }
+
+    # --- Consolidated round files (output/*.jsonld, output/*.html) ---
+    for f in jsonld_files:
+        if f.stem not in matched_jsonld_stems:
+            continue
+        if dry_run:
+            print(f"  [dry-run] would delete: {f}")
+        else:
+            try:
+                f.unlink()
+                print(f"  deleted: {f}")
+                deleted.append(f)
+            except OSError as exc:
+                print(f"  ERROR deleting {f}: {exc}", file=sys.stderr)
+                errors.append(f)
+
+    for f in sorted(output_path.glob("*.html")):
+        if rounds is not None and f.stem not in matched_jsonld_stems and not _matches_round(f.name):
+            continue
+        if dry_run:
+            print(f"  [dry-run] would delete: {f}")
+        else:
+            try:
+                f.unlink()
+                print(f"  deleted: {f}")
+                deleted.append(f)
+            except OSError as exc:
+                print(f"  ERROR deleting {f}: {exc}", file=sys.stderr)
+                errors.append(f)
 
     # --- Per-round subdirectories (output/YYYY-MM-DD/) ---
     for d in sorted(output_path.iterdir()):

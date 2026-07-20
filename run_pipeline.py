@@ -29,6 +29,30 @@ def get_schema_version_from_dir(round_dir: Path) -> str:
         return "unknown"
 
 
+def get_round_id_from_jsonld_file(jsonld_file: Path) -> str:
+    """Read the round id from a consolidated round JSON-LD file."""
+    try:
+        with open(jsonld_file, "r") as f:
+            data = json.load(f)
+    except Exception:
+        return ""
+
+    if not isinstance(data.get("hasPart"), list):
+        return ""
+
+    round_id = data.get("roundId") or data.get("identifier")
+    return str(round_id) if round_id else ""
+
+
+def find_consolidated_jsonld_files(output_dir: Path) -> List[Path]:
+    """Find root-level consolidated round JSON-LD files in an output directory."""
+    return sorted(
+        f
+        for f in output_dir.glob("*.jsonld")
+        if f.is_file() and get_round_id_from_jsonld_file(f)
+    )
+
+
 class Colors:
     """ANSI color codes for terminal output."""
     HEADER = '\033[95m'
@@ -210,7 +234,11 @@ def create_jsonld(rounds: List[str] = None) -> bool:
         }
 
     def _collect_consolidated_names(round_id: str) -> set:
-        consolidated_files = sorted(Path('output').glob(f'round_{round_id}_v*.jsonld'))
+        consolidated_files = [
+            f
+            for f in find_consolidated_jsonld_files(Path('output'))
+            if get_round_id_from_jsonld_file(f) == round_id
+        ]
         if not consolidated_files:
             return set()
 
@@ -281,7 +309,7 @@ def create_jsonld(rounds: List[str] = None) -> bool:
 
     if all_success:
         output_dir = Path('output')
-        jsonld_files = list(output_dir.glob('round_*.jsonld'))
+        jsonld_files = find_consolidated_jsonld_files(output_dir)
         print_success(f"Created {len(jsonld_files)} round JSON-LD files: {', '.join(f.name for f in jsonld_files)}")
 
     return all_success
@@ -300,7 +328,7 @@ def generate_html(rounds: List[str] = None) -> bool:
     print_header("Step 3: Generating HTML Visualizations")
 
     output_dir = Path('output')
-    round_jsonld_files = list(output_dir.glob('round_*.jsonld'))
+    round_jsonld_files = find_consolidated_jsonld_files(output_dir)
 
     if not round_jsonld_files:
         print_error("No round JSON-LD files found to convert")
@@ -308,8 +336,10 @@ def generate_html(rounds: List[str] = None) -> bool:
 
     # Filter by specific rounds if provided
     if rounds:
-        round_jsonld_files = [f for f in round_jsonld_files
-                            if any(r in f.name for r in rounds)]
+        round_jsonld_files = [
+            f for f in round_jsonld_files
+            if get_round_id_from_jsonld_file(f) in rounds
+        ]
         if not round_jsonld_files:
             print_error(f"No JSON-LD files found for rounds: {rounds}")
             return False
@@ -318,13 +348,8 @@ def generate_html(rounds: List[str] = None) -> bool:
     html_files = []
 
     for jsonld_file in round_jsonld_files:
-        # Extract round ID from filename: round_YYYY-MM-DD_vX.X.X.jsonld → YYYY-MM-DD
-        m = re.match(r'round_(\d{4}-\d{2}-\d{2})(?:_v[\d.]+)?', jsonld_file.stem)
-        round_id = m.group(1) if m else jsonld_file.stem.replace('round_', '')
-
-        # Preserve the version suffix in the HTML filename if present
-        version_part = jsonld_file.stem[len(f'round_{round_id}'):]  # e.g. '_v6.0.0' or ''
-        output_file = jsonld_file.with_name(f'round_{round_id}{version_part}.html')
+        round_id = get_round_id_from_jsonld_file(jsonld_file)
+        output_file = jsonld_file.with_suffix('.html')
 
         print_info(f"Converting {jsonld_file.name} to HTML...")
 
@@ -509,4 +534,3 @@ Examples:
 
 if __name__ == '__main__':
     main()
-

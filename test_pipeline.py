@@ -131,8 +131,10 @@ def validate_jsonld_file(filepath: Path) -> Tuple[bool, List[str]]:
     if '@type' in data and data['@type'] != 'Dataset':
         issues.append(f"Expected @type 'Dataset', got '{data['@type']}'")
 
+    is_round_file = isinstance(data.get('hasPart'), list)
+
     # For round files, check for hasPart
-    if 'round_' in str(filepath):
+    if is_round_file:
         if 'hasPart' not in data:
             issues.append("Round file missing 'hasPart' array")
         elif not isinstance(data['hasPart'], list):
@@ -147,7 +149,7 @@ def validate_jsonld_file(filepath: Path) -> Tuple[bool, List[str]]:
             issues.append(f"Missing recommended field: {field}")
 
     # For individual model files (not round files), check for author
-    if not filepath.name.startswith('round'):
+    if not is_round_file:
         if 'author' not in data:
             issues.append("Missing recommended field: author")
         elif not isinstance(data['author'], list):
@@ -330,18 +332,22 @@ class TestJsonLDToHTML:
             output_dir: Path to the output directory
         """
         # Find available round JSON-LD files
-        round_jsonld_files = list(output_dir.glob('round_*.jsonld'))
+        round_jsonld_files = []
+        for jsonld_file in output_dir.glob('*.jsonld'):
+            with open(jsonld_file, 'r') as f:
+                data = json.load(f)
+            if isinstance(data.get('hasPart'), list):
+                round_jsonld_files.append(jsonld_file)
 
         assert len(round_jsonld_files) > 0, "No round JSON-LD files found to convert"
 
         # Test conversion for each round file
         failed_conversions = []
         for jsonld_file in round_jsonld_files:
-            # Extract round ID: round_YYYY-MM-DD_vX.X.X.jsonld → YYYY-MM-DD
-            m = re.match(r'round_(\d{4}-\d{2}-\d{2})(?:_v[\d.]+)?', jsonld_file.stem)
-            round_id = m.group(1) if m else jsonld_file.stem.replace('round_', '')
-            version_part = jsonld_file.stem[len(f'round_{round_id}'):]
-            output_file = jsonld_file.with_name(f'round_{round_id}{version_part}.html')
+            with open(jsonld_file, 'r') as f:
+                data = json.load(f)
+            round_id = data.get('roundId') or data.get('identifier')
+            output_file = jsonld_file.with_suffix('.html')
 
             # Run the script
             success, stdout, stderr = run_command(
@@ -394,6 +400,5 @@ class TestJsonLDToHTML:
                 for file, issues in all_issues.items()
             ])
             pytest.fail(f"HTML validation failed for {len(all_issues)} files:\n{error_msg}")
-
 
 

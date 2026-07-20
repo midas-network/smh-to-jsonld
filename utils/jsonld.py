@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from pathlib import Path
 
 import yaml
 
@@ -19,11 +20,76 @@ def initialize_work_example(jsonld_data):
         }
 
 
-def add_round_info(jsonld_data, round_id):
+def format_round_name(round_id, round_name=None):
+    """Return a human-readable round name, falling back to the round id label."""
+    if round_name is not None:
+        display_name = str(round_name).strip()
+        if display_name:
+            return display_name
+    return f"Round {round_id}"
+
+
+def format_round_filename_stem(round_id, round_name=None):
+    """Return the consolidated output filename stem for a round."""
+    if round_name is not None:
+        display_name = str(round_name).strip()
+        if display_name:
+            return display_name.replace(" ", "_").replace("/", "_")
+    return f"round_{round_id}"
+
+
+def get_consolidated_round_id(jsonld_data):
+    """Return round id from consolidated JSON-LD data, or None for model JSON-LD."""
+    if not isinstance(jsonld_data, dict):
+        return None
+    if not isinstance(jsonld_data.get("hasPart"), list):
+        return None
+
+    return jsonld_data.get("roundId") or jsonld_data.get("identifier")
+
+
+def remove_existing_consolidated_outputs(output_dir, round_id):
+    """Remove stale consolidated JSON-LD/HTML outputs for a round before rewriting."""
+    output_path = Path(output_dir)
+    if not output_path.exists():
+        return
+
+    for existing_file in output_path.glob("*.jsonld"):
+        try:
+            with open(existing_file, "r") as f:
+                existing_data = json.load(f)
+        except Exception:
+            continue
+
+        if str(get_consolidated_round_id(existing_data)) != str(round_id):
+            continue
+
+        for path in (existing_file, existing_file.with_suffix(".html")):
+            if not path.exists():
+                continue
+            try:
+                path.unlink()
+            except OSError as exc:
+                logging.warning(f"Unable to remove stale output {path}: {exc}")
+
+
+def get_configured_round_name(config, round_id):
+    """Return a configured round display name when available."""
+    if not hasattr(config, "get_round_by_id"):
+        return None
+
+    round_config = config.get_round_by_id(round_id)
+    if round_config is None:
+        return None
+
+    return getattr(round_config, "round_name", None)
+
+
+def add_round_info(jsonld_data, round_id, round_name=None):
     """Add round information to the workExample."""
     jsonld_data["workExample"]["isPartOf"] = {
         "@type": "Event",
-        "name": f"Round {round_id}",
+        "name": format_round_name(round_id, round_name),
         "identifier": round_id
     }
 
@@ -91,7 +157,7 @@ def enrich_jsonld_with_model_output(jsonld_data, round_id, model_name, config, d
 
     # Initialize and populate workExample
     initialize_work_example(jsonld_data)
-    add_round_info(jsonld_data, round_id)
+    add_round_info(jsonld_data, round_id, get_configured_round_name(config, round_id))
 
     jsonld_data["workExample"]["output_type"] = [output_types]
 
@@ -206,10 +272,12 @@ def create_consolidated_round_jsonld(round_output_dir, round_id, config, global_
 
     # Get all JSON-LD files in the round output directory
     jsonld_files = [f for f in os.listdir(round_output_dir) if f.endswith('.jsonld') and not f.startswith('round_')]
+    round_name = get_configured_round_name(config, round_id)
+    display_round_name = format_round_name(round_id, round_name)
 
     # Create the basic structure for the consolidated JSON-LD
     consolidated = {"@context": "https://schema.org/", "@type": "Dataset",
-                    "name": f"Round {round_id} Scenario Projection Models Collection",
+                    "name": f"{display_round_name} Scenario Projection Models Collection",
                     "description": f"Collection of model output from round {round_id}", "identifier": round_id,
                     "hasPart": [], "workExample": {
             "@type": [
@@ -257,7 +325,9 @@ def create_consolidated_round_jsonld(round_output_dir, round_id, config, global_
 
     # Write the consolidated file
     version_suffix = f"_v{schema_version}" if schema_version else ""
-    consolidated_file_path = os.path.join(output_dir, f"round_{round_id}{version_suffix}.jsonld")
+    output_stem = format_round_filename_stem(round_id, round_name)
+    consolidated_file_path = os.path.join(output_dir, f"{output_stem}{version_suffix}.jsonld")
+    remove_existing_consolidated_outputs(output_dir, round_id)
     with open(consolidated_file_path, 'w') as f:
         json.dump(consolidated, f, indent=2)
 
