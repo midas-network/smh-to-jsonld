@@ -11,6 +11,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 import pandas as pd
 import pyarrow.dataset as ds
 
+from utils.output_types import get_output_type_definition
+
 
 def get_first_n_rows_of_output(n, round_id, model):
     model_dir = Path("data") / round_id / "model-output" / model
@@ -435,8 +437,19 @@ def generate_output_types_section(model):
 
     html = ''
     for output_type in output_types:
+        definition = get_output_type_definition(output_type)
         html += '                <div class="author">\n'
-        html += f'                    {output_type}<br>\n'
+        if definition:
+            html += f'                    <strong>{output_type}</strong> — {definition["label"]}<br>\n'
+            html += f'                    {definition["definition"]}<br>\n'
+            if definition.get("iri"):
+                html += (
+                    f'                    <a href="{definition["iri"]}" target="_blank">'
+                    f'Ontology reference ({definition["definition_source"]})</a><br>\n'
+                )
+        else:
+            # Unknown output type: fall back to the bare string, never crash.
+            html += f'                    {output_type}<br>\n'
         html += '                </div>\n'
 
     return html

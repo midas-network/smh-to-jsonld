@@ -1,0 +1,55 @@
+{
+  "_meta": {
+    "description": "Hubverse output_type -> ontology term / definition mapping. Resolved in midas-network/smh-to-jsonld issue #25 (Lucie Contamin, Harry Hochheiser). Single source of truth consumed by utils/output_types.py.",
+    "learn_more_url": "https://docs.hubverse.io/en/latest/user-guide/model-output.html",
+    "sources": {
+      "STATO": "https://www.ebi.ac.uk/ols4/ontologies/stato",
+      "ProbOnto": "https://www.ebi.ac.uk/ols4/ontologies/probonto",
+      "Hubverse": "https://docs.hubverse.io/en/latest/user-guide/model-output.html"
+    }
+  },
+  "output_types": {
+    "mean": {
+      "label": "population mean",
+      "definition": "The population mean or distribution mean is a parameter of a probability distribution or population indicative of the data dispersion. For continuous probability distributions, the population mean is computed using the probability density function; for discrete probability distributions, a mass density function is used instead. A population mean can be estimated by computing a sample mean.",
+      "definition_source": "STATO",
+      "iri": "http://purl.obolibrary.org/obo/STATO_0000402",
+      "iri_match": "exact"
+    },
+    "median": {
+      "label": "center value",
+      "definition": "The median is that value of the variate which divides the total frequency into two halves. The median is a measure of central tendency of data. It is obtained by arranging the observations in order from smallest to largest value. If there is an odd number of observations, the median is the middle value. If there is an even number of observations, the median is the average of the two middle values.",
+      "definition_source": "STATO",
+      "iri": "http://purl.obolibrary.org/obo/STATO_0000574",
+      "iri_match": "exact"
+    },
+    "quantile": {
+      "label": "quantile",
+      "definition": "A quantile is a data item which corresponds to specific elements x in the range of a variate X. The k-th n-tile P_k is that value of x, say x_k, which corresponds to a cumulative frequency of Nk/n (Kenney and Keeping 1962). If n=4, the quantity is called a quartile, and if n=100, it is called a percentile.",
+      "definition_source": "STATO",
+      "iri": "http://purl.obolibrary.org/obo/STATO_0000291",
+      "iri_match": "exact"
+    },
+    "cdf": {
+      "label": "cumulative distribution function",
+      "definition": "The cumulative distribution function (CDF) of a random variable is a function that gives, for any value x in the range of the variable, the probability that the variable takes a value less than or equal to x. It is defined as F(x) = P(X ≤ x), and is non-decreasing, right-continuous, and takes values between 0 and 1 inclusive.",
+      "definition_source": "MIDAS (ProbOnto has no prose definition for this term)",
+      "iri": "http://www.probonto.org/ontology#PROB_c0000025",
+      "iri_match": "closeMatch"
+    },
+    "pmf": {
+      "label": "probability mass function",
+      "definition": "The probability mass function (PMF) of a discrete random variable is a function that gives the probability that the variable takes on a specific value. It is defined as f(x) = P(X = x) for each value x in the variable's range, and the sum of f(x) over all possible values equals 1.",
+      "definition_source": "MIDAS (ProbOnto has no prose definition for this term)",
+      "iri": "http://www.probonto.org/ontology#PROB_c0000024",
+      "iri_match": "closeMatch"
+    },
+    "sample": {
+      "label": "sample",
+      "definition": "Numeric: a sample from the predictive distribution.",
+      "definition_source": "Hubverse",
+      "iri": null,
+      "iri_match": "none"
+    }
+  }
+}
