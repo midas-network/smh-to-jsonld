@@ -3,6 +3,8 @@ import csv
 import json
 import os
 import sys
+from html import escape
+from numbers import Real
 from pathlib import Path
 
 # Add parent directory to path to allow imports and access to data/output directories
@@ -13,13 +15,24 @@ import pyarrow.dataset as ds
 
 from utils.output_types import get_output_type_definition
 
+HUBVERSE_SAMPLE_OUTPUT_DOC_URL = "https://docs.hubverse.io/en/latest/user-guide/sample-output-type.html"
+SAMPLE_ID_COLUMNS = ("run_grouping", "stochastic_run")
+OUTPUT_METADATA_EXCLUDE_COLUMNS = {
+    "model_id",
+    "run_grouping",
+    "stochastic_run",
+    "output_type",
+    "output_type_id",
+    "value",
+}
 
-def get_first_n_rows_of_output(n, round_id, model):
+
+def load_model_output_dataframe(round_id, model):
     model_dir = Path("data") / round_id / "model-output" / model
     parquet_files = sorted(model_dir.glob("*.parquet"))
 
     if not parquet_files:
-        return ""
+        return pd.DataFrame()
 
     pa_table = ds.dataset([str(path) for path in parquet_files], format="parquet").to_table()
     df = pa_table.to_pandas()
@@ -28,6 +41,10 @@ def get_first_n_rows_of_output(n, round_id, model):
     if "model_id" in df.columns:
         df = df[df["model_id"] == model]
 
+    return df
+
+
+def format_first_n_rows_of_output(n, df):
     if df.empty:
         return ""
 
@@ -37,6 +54,129 @@ def get_first_n_rows_of_output(n, round_id, model):
 
     html_output = df.to_html(index=False, border=0)
     return html_output
+
+
+def get_first_n_rows_of_output(n, round_id, model):
+    df = load_model_output_dataframe(round_id, model)
+    return format_first_n_rows_of_output(n, df)
+
+
+def filter_by_output_type(df, output_type):
+    if df.empty or "output_type" not in df.columns:
+        return pd.DataFrame(columns=df.columns)
+
+    output_type_values = df["output_type"].astype(str).str.strip().str.lower()
+    return df[output_type_values == output_type].copy()
+
+
+def format_metadata_value(value):
+    if pd.isna(value):
+        return ""
+    if isinstance(value, Real) and not isinstance(value, bool):
+        return f"{float(value):g}"
+    return str(value)
+
+
+def format_unique_values_for_display(series):
+    values = series.dropna().drop_duplicates().tolist()
+    if not values:
+        return []
+
+    numeric_values = pd.to_numeric(pd.Series(values), errors="coerce")
+    if numeric_values.notna().all():
+        sort_keyed_values = sorted(zip(numeric_values.tolist(), values), key=lambda item: item[0])
+        sorted_values = [value for _, value in sort_keyed_values]
+    else:
+        sorted_values = sorted(values, key=lambda value: str(value))
+
+    formatted_values = []
+    seen = set()
+    for value in sorted_values:
+        formatted = format_metadata_value(value)
+        if formatted and formatted not in seen:
+            formatted_values.append(formatted)
+            seen.add(formatted)
+
+    return formatted_values
+
+
+def summarize_quantile_output(df):
+    quantile_df = filter_by_output_type(df, "quantile")
+    if quantile_df.empty or "output_type_id" not in quantile_df.columns:
+        return {}
+
+    quantiles = format_unique_values_for_display(quantile_df["output_type_id"])
+    if not quantiles:
+        return {}
+
+    return {"quantiles": quantiles}
+
+
+def summarize_sample_output(df):
+    sample_df = filter_by_output_type(df, "sample")
+    if sample_df.empty:
+        return {}
+
+    missing_columns = [column for column in SAMPLE_ID_COLUMNS if column not in sample_df.columns]
+    if missing_columns:
+        return {"missing_columns": missing_columns}
+
+    sample_count = int(sample_df.loc[:, SAMPLE_ID_COLUMNS].drop_duplicates().shape[0])
+    task_columns = [
+        column
+        for column in sample_df.columns
+        if column not in OUTPUT_METADATA_EXCLUDE_COLUMNS
+    ]
+
+    if not task_columns:
+        return {
+            "sample_count": sample_count,
+            "compound_task_id_set": [],
+        }
+
+    globally_constant_columns = {
+        column
+        for column in task_columns
+        if sample_df[column].nunique(dropna=False) == 1
+    }
+
+    group_nunique = sample_df.groupby(
+        list(SAMPLE_ID_COLUMNS),
+        sort=True,
+        dropna=False,
+    )[task_columns].nunique(dropna=False)
+
+    compound_task_id_set = []
+    seen = set()
+    for _, row in group_nunique.iterrows():
+        for column in task_columns:
+            if column in globally_constant_columns:
+                continue
+            if row[column] == 1 and column not in seen:
+                compound_task_id_set.append(column)
+                seen.add(column)
+
+    return {
+        "sample_count": sample_count,
+        "compound_task_id_set": compound_task_id_set,
+    }
+
+
+def summarize_output_type_metadata(df):
+    if df.empty:
+        return {}
+
+    metadata = {}
+
+    sample_summary = summarize_sample_output(df)
+    if sample_summary:
+        metadata["sample"] = sample_summary
+
+    quantile_summary = summarize_quantile_output(df)
+    if quantile_summary:
+        metadata["quantile"] = quantile_summary
+
+    return metadata
 
 
 def load_geodata_mapping():
@@ -422,7 +562,58 @@ def generate_spatial_coverage_section(model, geodata_map):
     return html
 
 
-def generate_output_types_section(model):
+def normalize_output_type_name(output_type):
+    return str(output_type).strip().lower()
+
+
+def generate_output_type_metadata_html(output_type, output_type_metadata):
+    metadata = (output_type_metadata or {}).get(normalize_output_type_name(output_type))
+    if not metadata:
+        return ""
+
+    normalized_output_type = normalize_output_type_name(output_type)
+    html = ""
+
+    if normalized_output_type == "sample":
+        missing_columns = metadata.get("missing_columns", [])
+        if missing_columns:
+            missing_display = ", ".join(escape(str(column)) for column in missing_columns)
+            html += (
+                "                    <strong>Sample metadata unavailable:</strong> "
+                f"missing {missing_display}<br>\n"
+            )
+        else:
+            sample_count = metadata.get("sample_count")
+            compound_task_id_set = metadata.get("compound_task_id_set", [])
+            if compound_task_id_set:
+                compound_display = ", ".join(escape(str(column)) for column in compound_task_id_set)
+            else:
+                # An empty set means every task variable varies within a sample,
+                # i.e. samples are independent draws across all task variables.
+                compound_display = "None (samples independent across task variables)"
+
+            html += f"                    <strong>Number of samples:</strong> {escape(str(sample_count))}<br>\n"
+            html += (
+                "                    <strong>Compound task ID set:</strong> "
+                f"{compound_display}<br>\n"
+            )
+
+        html += (
+            f'                    <a href="{HUBVERSE_SAMPLE_OUTPUT_DOC_URL}" target="_blank">'
+            "Hubverse sample output documentation</a><br>\n"
+        )
+
+    if normalized_output_type == "quantile" and metadata.get("quantiles"):
+        quantile_display = ", ".join(escape(str(quantile)) for quantile in metadata["quantiles"])
+        html += (
+            "                    <strong>Submitted quantiles:</strong> "
+            f"{quantile_display}<br>\n"
+        )
+
+    return html
+
+
+def generate_output_types_section(model, output_type_metadata=None):
     """Generate output types section content."""
     if 'workExample' not in model or 'output_type' not in model['workExample']:
         return ''
@@ -450,6 +641,7 @@ def generate_output_types_section(model):
         else:
             # Unknown output type: fall back to the bare string, never crash.
             html += f'                    {output_type}<br>\n'
+        html += generate_output_type_metadata_html(output_type, output_type_metadata)
         html += '                </div>\n'
 
     return html
@@ -469,7 +661,7 @@ def generate_age_groups_section(model):
     return html
 
 
-def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html):
+def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html, output_type_metadata=None):
     """Generate tabbed section for sample output, output types, age groups, targets, and spatial coverage."""
     has_output_types = 'workExample' in model and 'output_type' in model['workExample']
     has_age_groups = 'workExample' in model and 'ageGroups' in model['workExample']
@@ -523,7 +715,7 @@ def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html):
     if has_output_types:
         active_class = ' active' if first_tab == 'output' else ''
         html += f'            <div class="tab-content{active_class}" id="model-{model_idx}-content-output">\n'
-        html += generate_output_types_section(model)
+        html += generate_output_types_section(model, output_type_metadata)
         html += '            </div>\n'
 
     # Add tab content for targets
@@ -603,12 +795,15 @@ def parse_jsonld_to_html(jsonld_file, round_id):
     for idx, model in enumerate(models):
         license = model.get('license', 'N/A').upper()
         model_id = f"model-{idx}"
-        parquet_html= get_first_n_rows_of_output(3, round_id, models[idx]["name"])
+        model_name = model.get("name", "Unknown Model")
+        model_output_df = load_model_output_dataframe(round_id, model_name)
+        parquet_html = format_first_n_rows_of_output(3, model_output_df)
+        output_type_metadata = summarize_output_type_metadata(model_output_df)
 
         # Model header
         html += f"""    <div class="model" id="{model_id}">
         <div class="model-header">
-            <h2>{model.get('name', 'Unknown Model')}</h2>
+            <h2>{model_name}</h2>
             <a href="#index" class="back-to-top">↑ Back to Index</a>
         </div>
 """
@@ -673,7 +868,7 @@ def parse_jsonld_to_html(jsonld_file, round_id):
         html += generate_temporal_coverage_section(model)
 
         # Projection Data Snippet, Output types, Targets, Spatial Coverage, and Age groups in tabs
-        html += generate_tabbed_section(model, idx, geodata_map, parquet_html)
+        html += generate_tabbed_section(model, idx, geodata_map, parquet_html, output_type_metadata)
 
         html += '    </div>\n'
 
