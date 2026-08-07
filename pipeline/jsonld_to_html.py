@@ -132,18 +132,11 @@ def summarize_sample_output(df):
         return []
     sample_count = sample_count[0]
 
-
     if not task_columns:
         return {
             "sample_count": sample_count,
             "compound_task_id_set": [],
         }
-
-    globally_constant_columns = {
-        column
-        for column in task_columns
-        if sample_df[column].nunique(dropna=False) == 1
-    }
 
     group_nunique = sample_df.groupby(
         list(SAMPLE_ID_COLUMNS),
@@ -155,8 +148,6 @@ def summarize_sample_output(df):
     seen = set()
     for _, row in group_nunique.iterrows():
         for column in task_columns:
-            if column in globally_constant_columns:
-                continue
             if row[column] == 1 and column not in seen:
                 compound_task_id_set.append(column)
                 seen.add(column)
