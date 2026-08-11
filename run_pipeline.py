@@ -150,11 +150,12 @@ def run_command(command: List[str], description: str, show_output: bool = True) 
         return False, "", str(e)
 
 
-def update_source_data(skip: bool = False) -> bool:
+def update_source_data(rounds: List[str] = None, skip: bool = False) -> bool:
     """
     Run the update_source_data.py script.
 
     Args:
+        rounds: List of specific round IDs to download (None = all rounds)
         skip: If True, skip this step
 
     Returns:
@@ -166,8 +167,12 @@ def update_source_data(skip: bool = False) -> bool:
 
     print_header("Step 1: Updating Source Data")
 
+    command = ['python3', 'pipeline/update_source_data.py']
+    if rounds:
+        command += ['--rounds', *rounds]
+
     success, _, _ = run_command(
-        ['python3', 'pipeline/update_source_data.py'],
+        command,
         'Downloading and updating source data from repositories'
     )
 
@@ -432,7 +437,8 @@ Examples:
         '--rounds',
         nargs='+',
         metavar='ROUND_ID',
-        help='Process only specific round IDs (e.g., 2024-07-28)'
+        help='Process only specific round IDs (e.g., 2024-07-28). '
+             'Scopes all steps, including the download, to just these rounds.'
     )
 
     parser.add_argument(
@@ -476,7 +482,7 @@ Examples:
 
     # Step 1: Update source data
     if not args.skip_update:
-        results['update_source_data'] = update_source_data()
+        results['update_source_data'] = update_source_data(args.rounds)
         if not results['update_source_data'] and args.stop_on_error:
             print_error("Pipeline stopped due to error in source data update")
             sys.exit(1)

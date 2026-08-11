@@ -1,3 +1,4 @@
+import argparse
 import os
 import re
 import shutil
@@ -111,6 +112,11 @@ def get_github_release_tags(repo_url, last_version=True):
         print(f"❌ Error fetching tags: {e}")
         return []
 
+def round_id_from_tag(tag):
+    """Return the round id (``YYYY-MM-DD``) for a release tag, dropping any ``-vX`` suffix."""
+    return re.split("-v.", tag)[0]
+
+
 def delete_ignored_files_and_directories(directory, ignore_files_regex):
     """
     Delete files and directories in the specified directory that match the ignore regex.
@@ -184,6 +190,18 @@ def keep_only_round_files(directory, round_id):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Download and update source data from the configured hub repositories."
+    )
+    parser.add_argument(
+        "--rounds",
+        nargs="+",
+        metavar="ROUND_ID",
+        help="Download only these round IDs (e.g., 2023-11-12). Default: all rounds.",
+    )
+    args = parser.parse_args()
+    requested_rounds = set(args.rounds) if args.rounds else None
+
     # Capture stdout for logging
     output_capture = io.StringIO()
 
@@ -235,14 +253,23 @@ if __name__ == "__main__":
                     print(f"❌ Error processing repository {repo_url} with branch {branch}: {e}")
                 continue
 
+            # Restrict to requested rounds, if any
+            if requested_rounds is not None:
+                tags = [t for t in tags if round_id_from_tag(t) in requested_rounds]
+                matched = sorted({round_id_from_tag(t) for t in tags})
+                missing = sorted(requested_rounds - set(matched))
+                print(f"Filtering to requested rounds: {', '.join(sorted(requested_rounds))}")
+                if missing:
+                    print(f"⚠️ No tags found for requested rounds: {', '.join(missing)}")
+
             # Process each tag
             print(f"Found {len(tags)} tags to process")
             for tag in tags:
                 try:
                     # Create tag-specific output directory
-                    tag_output_dir = os.path.join(base_output_dir, re.split("-v.", tag)[0])
+                    round_id = round_id_from_tag(tag)
+                    tag_output_dir = os.path.join(base_output_dir, round_id)
                     os.makedirs(tag_output_dir, exist_ok=True)
-                    round_id = re.split("-v.", tag)[0]
 
                     print(f"\n🏷️ Processing tag: {tag}")
                     clone_and_extract_dirs(repo_url, directories, tag_output_dir, tag, 'tag')

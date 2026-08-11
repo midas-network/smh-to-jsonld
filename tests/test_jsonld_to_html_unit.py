@@ -162,6 +162,20 @@ def test_output_types_section_renders_parquet_metadata():
     assert "https://docs.hubverse.io/en/latest/user-guide/sample-output-type.html" in html
 
 
+def test_ensemble_output_types_section_labels_quantiles_as_calculated():
+    model = {
+        "name": "Team-Ensemble",
+        "workExample": {"output_type": [["quantile"]]},
+    }
+    metadata = {"quantile": {"quantiles": ["0.025", "0.5", "0.975"]}}
+
+    html = generate_output_types_section(model, metadata)
+
+    # Ensemble models calculate their quantiles rather than submitting them.
+    assert "Calculated quantiles" in html
+    assert "Submitted quantiles" not in html
+
+
 def test_sample_metadata_describes_empty_compound_task_id_set_as_independent():
     metadata = {"sample": {"sample_count": 300, "compound_task_id_set": []}}
 

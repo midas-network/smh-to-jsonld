@@ -373,6 +373,28 @@ def generate_html_head(title):
         table {{
             padding: 0px 10px;
         }}
+        table.dataframe {{
+            border-collapse: collapse;
+            width: 100%;
+            margin: 10px 0;
+            padding: 0;
+            font-size: 0.9em;
+        }}
+        table.dataframe th,
+        table.dataframe td {{
+            border: 1px solid #cfd8e3;
+            padding: 6px 10px;
+        }}
+        table.dataframe thead th {{
+            background: #3498db;
+            color: #ffffff;
+        }}
+        table.dataframe tbody tr:nth-child(even) {{
+            background: #f4f8fb;
+        }}
+        table.dataframe tbody tr:hover {{
+            background: #e8f4f8;
+        }}
     </style>
     <script>
         function switchTab(modelIdx, tabName) {{
@@ -566,7 +588,7 @@ def normalize_output_type_name(output_type):
     return str(output_type).strip().lower()
 
 
-def generate_output_type_metadata_html(output_type, output_type_metadata):
+def generate_output_type_metadata_html(output_type, output_type_metadata, is_ensemble=False):
     metadata = (output_type_metadata or {}).get(normalize_output_type_name(output_type))
     if not metadata:
         return ""
@@ -605,8 +627,10 @@ def generate_output_type_metadata_html(output_type, output_type_metadata):
 
     if normalized_output_type == "quantile" and metadata.get("quantiles"):
         quantile_display = ", ".join(escape(str(quantile)) for quantile in metadata["quantiles"])
+        # Ensemble models compute their quantiles rather than submitting them.
+        quantile_label = "Calculated quantiles" if is_ensemble else "Submitted quantiles"
         html += (
-            "                    <strong>Submitted quantiles:</strong> "
+            f"                    <strong>{quantile_label}:</strong> "
             f"{quantile_display}<br>\n"
         )
 
@@ -617,6 +641,10 @@ def generate_output_types_section(model, output_type_metadata=None):
     """Generate output types section content."""
     if 'workExample' not in model or 'output_type' not in model['workExample']:
         return ''
+
+    # Ensemble models (those with "Ensemble" in the name) calculate their
+    # output values instead of having them submitted directly.
+    is_ensemble = "ensemble" in model.get("name", "").lower()
 
     # output_type is stored as [list_of_types]; flatten to get individual type strings
     output_types = []
@@ -641,7 +669,7 @@ def generate_output_types_section(model, output_type_metadata=None):
         else:
             # Unknown output type: fall back to the bare string, never crash.
             html += f'                    {output_type}<br>\n'
-        html += generate_output_type_metadata_html(output_type, output_type_metadata)
+        html += generate_output_type_metadata_html(output_type, output_type_metadata, is_ensemble)
         html += '                </div>\n'
 
     return html
@@ -729,7 +757,7 @@ def generate_tabbed_section(model, model_idx, geodata_map, sample_output_html, o
             html += f'                        <strong>Unit:</strong> {variable.get("unitText", "N/A")}<br>\n'
             html += f'                        <strong>Target ID:</strong> {variable.get("target_id", "N/A")}<br>\n'
             html += f'                        <strong>Type:</strong> {variable.get("target_type", "N/A")}<br>\n'
-            html += f'                        <strong>Available Output Types:</strong> <span class="no-wrap">{format_available_output_types(variable)}</span> <br>\n'
+            html += f'                        <strong>Possible Output Types:</strong> <span class="no-wrap">{format_available_output_types(variable)}</span> <br>\n'
             html += f'                        <strong>Temporal Unit:</strong> {variable.get("temporalUnit", "N/A")}<br>\n'
             if 'identifier' in variable:
                 html += f'                        <a href="{variable["identifier"]}" target="_blank">Ontology Reference</a><br>\n'
@@ -857,9 +885,9 @@ def parse_jsonld_to_html(jsonld_file, round_id):
         # Producer
         if 'producer' in model:
             producer = model['producer']
-            html += f'        <p><strong>Producer:</strong> {producer.get("name", "N/A")}</p>\n'
+            html += f'        <p><strong>Team:</strong> {producer.get("name", "N/A")}</p>\n'
             if 'funder' in producer:
-                html += f'        <p class="metadata"><em>Funding: {producer["funder"].get("description", "N/A")}</em></p>\n'
+                html += f'        <p><strong>Funding:</strong> {producer["funder"].get("description", "N/A")}</p>\n'
 
         # Authors
         html += generate_authors_section(model)
