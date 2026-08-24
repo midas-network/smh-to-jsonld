@@ -38,9 +38,13 @@ def skip_update(request):
 
 
 @pytest.fixture(scope="session")
-def output_dir():
-    """Fixture for the output directory."""
-    return Path('output')
+def output_dir(tmp_path_factory):
+    """Fixture for a temporary pipeline output directory.
+
+    The pipeline tests generate JSON-LD/HTML here instead of the real ``output/``
+    directory, so running the suite never clobbers the canonical pipeline output.
+    """
+    return tmp_path_factory.mktemp("pipeline_output")
 
 
 @pytest.fixture(scope="session")
@@ -236,7 +240,7 @@ class TestUpdateSourceData:
 
         # Run the update script
         success, stdout, stderr = run_command(
-            ['python3', 'pipeline/update_source_data.py'],
+            [sys.executable, 'pipeline/update_source_data.py'],
             'Updating source data'
         )
 
@@ -271,9 +275,9 @@ class TestCreateJsonLD:
         Args:
             output_dir: Path to the output directory
         """
-        # Run the script
+        # Run the script, writing into the temporary output directory.
         success, stdout, stderr = run_command(
-            ['python3', 'pipeline/create_jsonld_v5_1_0.py'],
+            [sys.executable, 'pipeline/create_jsonld_v5_1_0.py', '--output', str(output_dir)],
             'Creating JSON-LD files'
         )
 
@@ -351,7 +355,7 @@ class TestJsonLDToHTML:
 
             # Run the script
             success, stdout, stderr = run_command(
-                ['python3', 'pipeline/jsonld_to_html.py',
+                [sys.executable, 'pipeline/jsonld_to_html.py',
                  '-i', str(jsonld_file),
                  '-o', str(output_file),
                  '-r', round_id],

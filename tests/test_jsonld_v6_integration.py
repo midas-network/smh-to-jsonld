@@ -305,6 +305,18 @@ class TestPerModelJsonLD:
                 f"Apache Parquet encodingFormat missing for {part['name']}"
             )
 
+    def test_jhu_output_type_metadata_in_jsonld(self, jhu_jsonld):
+        # Sample output-type metadata must be written into the canonical JSON-LD
+        # (not only the HTML) so that people can query it.
+        we = jhu_jsonld.get("workExample", {})
+        assert "output_type_metadata" in we, (
+            "output_type_metadata should be present in the JSON-LD"
+        )
+        sample = we["output_type_metadata"].get("sample")
+        assert sample is not None, "JHU is a sample model; sample metadata should be present"
+        assert sample["sample_count"] == 300
+        assert set(sample["compound_task_id_set"]) == {"location", "target", "origin_date"}
+
 
 # ---------------------------------------------------------------------------
 # Round directory output

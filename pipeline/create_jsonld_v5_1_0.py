@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 from utils.jsonld import yaml_to_jsonld, create_consolidated_round_jsonld, enrich_jsonld_with_model_output
 from utils.loggings import setup_logging
 from utils.model_output_smh import get_distinct_field_values, get_hub_ds
+from utils.output_type_summary import load_model_output_from_dir
 from utils.tasks_json_parser import read_tasks_config
 
 SCHEMA_VERSION = "5.1.0"
@@ -126,7 +127,10 @@ def process_single_model(yaml_file, metadata_dir, output_dir, round_id, config,
         merge_field_values(global_field_values_dict, distinct_field_values)
 
         # Enrich JSON-LD with model output data
-        enrich_jsonld_with_model_output(jsonld_data, round_id, model_name, config, distinct_field_values)
+        enrich_jsonld_with_model_output(
+            jsonld_data, round_id, model_name, config, distinct_field_values,
+            model_output_df=load_model_output_from_dir(model_output_dir, model_name),
+        )
 
     # Write JSON-LD output file
     os.makedirs(output_dir, exist_ok=True)

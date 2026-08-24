@@ -31,6 +31,10 @@ from utils.model_output_smh import (
     get_hub_ds,
     get_output_file_types,
 )
+from utils.output_type_summary import (
+    load_model_output_from_dir,
+    summarize_output_type_metadata,
+)
 from utils.temporal import calculate_temporal_coverage
 
 SCHEMA_VERSION = "6.0.0"
@@ -344,6 +348,7 @@ def enrich_jsonld_with_model_output_v6(
     round_path,
     target_metadata,
     distinct_field_values,
+    model_output_df=None,
 ):
     """Enrich JSON-LD data with model output data for the matched v6 round."""
     output_types = distinct_field_values.get("output_type", [])
@@ -374,6 +379,14 @@ def enrich_jsonld_with_model_output_v6(
         jsonld_data["workExample"]["ageGroups"] = [str(age_group) for age_group in age_groups]
 
     add_temporal_coverage(jsonld_data, temporal_coverage)
+
+    # Store the sample / quantile output-type metadata (number of samples,
+    # compound task ID set, submitted quantiles) so the canonical JSON-LD
+    # carries the same information the HTML page shows, making it queryable.
+    if model_output_df is not None and not model_output_df.empty:
+        output_type_metadata = summarize_output_type_metadata(model_output_df)
+        if output_type_metadata:
+            jsonld_data["workExample"]["output_type_metadata"] = output_type_metadata
 
 
 def process_single_model(
@@ -413,6 +426,7 @@ def process_single_model(
                 round_path,
                 target_metadata,
                 distinct_field_values,
+                model_output_df=load_model_output_from_dir(model_output_dir, model_name),
             )
         except Exception as exc:
             logging.warning(f"Skipping model output enrichment for {model_name}: {exc}")
