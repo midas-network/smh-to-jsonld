@@ -4,44 +4,27 @@ import json
 import os
 import sys
 from html import escape
-from numbers import Real
 from pathlib import Path
 
 # Add parent directory to path to allow imports and access to data/output directories
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import pandas as pd
-import pyarrow.dataset as ds
 
 from utils.output_types import get_output_type_definition
+from utils.output_type_summary import (
+    load_model_output_from_dir,
+    summarize_output_type_metadata,
+    summarize_quantile_output,
+    summarize_sample_output,
+)
 
 HUBVERSE_SAMPLE_OUTPUT_DOC_URL = "https://docs.hubverse.io/en/latest/user-guide/sample-output-type.html"
-SAMPLE_ID_COLUMNS = ("run_grouping", "stochastic_run")
-OUTPUT_METADATA_EXCLUDE_COLUMNS = {
-    "model_id",
-    "run_grouping",
-    "stochastic_run",
-    "output_type",
-    "output_type_id",
-    "value",
-}
 
 
 def load_model_output_dataframe(round_id, model):
     model_dir = Path("data") / round_id / "model-output" / model
-    parquet_files = sorted(model_dir.glob("*.parquet"))
-
-    if not parquet_files:
-        return pd.DataFrame()
-
-    pa_table = ds.dataset([str(path) for path in parquet_files], format="parquet").to_table()
-    df = pa_table.to_pandas()
-
-    # Be robust to mixed files by keeping only rows for this model when available.
-    if "model_id" in df.columns:
-        df = df[df["model_id"] == model]
-
-    return df
+    return load_model_output_from_dir(model_dir, model)
 
 
 def format_first_n_rows_of_output(n, df):
@@ -59,120 +42,6 @@ def format_first_n_rows_of_output(n, df):
 def get_first_n_rows_of_output(n, round_id, model):
     df = load_model_output_dataframe(round_id, model)
     return format_first_n_rows_of_output(n, df)
-
-
-def filter_by_output_type(df, output_type):
-    if df.empty or "output_type" not in df.columns:
-        return pd.DataFrame(columns=df.columns)
-
-    output_type_values = df["output_type"].astype(str).str.strip().str.lower()
-    return df[output_type_values == output_type].copy()
-
-
-def format_metadata_value(value):
-    if pd.isna(value):
-        return ""
-    if isinstance(value, Real) and not isinstance(value, bool):
-        return f"{float(value):g}"
-    return str(value)
-
-
-def format_unique_values_for_display(series):
-    values = series.dropna().drop_duplicates().tolist()
-    if not values:
-        return []
-
-    numeric_values = pd.to_numeric(pd.Series(values), errors="coerce")
-    if numeric_values.notna().all():
-        sort_keyed_values = sorted(zip(numeric_values.tolist(), values), key=lambda item: item[0])
-        sorted_values = [value for _, value in sort_keyed_values]
-    else:
-        sorted_values = sorted(values, key=lambda value: str(value))
-
-    formatted_values = []
-    seen = set()
-    for value in sorted_values:
-        formatted = format_metadata_value(value)
-        if formatted and formatted not in seen:
-            formatted_values.append(formatted)
-            seen.add(formatted)
-
-    return formatted_values
-
-
-def summarize_quantile_output(df):
-    quantile_df = filter_by_output_type(df, "quantile")
-    if quantile_df.empty or "output_type_id" not in quantile_df.columns:
-        return {}
-
-    quantiles = format_unique_values_for_display(quantile_df["output_type_id"])
-    if not quantiles:
-        return {}
-
-    return {"quantiles": quantiles}
-
-
-def summarize_sample_output(df):
-    sample_df = filter_by_output_type(df, "sample")
-    if sample_df.empty:
-        return {}
-
-    missing_columns = [column for column in SAMPLE_ID_COLUMNS if column not in sample_df.columns]
-    if missing_columns:
-        return {"missing_columns": missing_columns}
-
-    task_columns = [
-        column
-        for column in sample_df.columns
-        if column not in OUTPUT_METADATA_EXCLUDE_COLUMNS
-    ]
-    sample_count_df = sample_df.groupby(task_columns).size().reset_index().rename(columns={0: 'n'})
-    sample_count = sample_count_df['n'].unique().tolist()
-    if len(sample_count) > 1:
-        return []
-    sample_count = sample_count[0]
-
-    if not task_columns:
-        return {
-            "sample_count": sample_count,
-            "compound_task_id_set": [],
-        }
-
-    group_nunique = sample_df.groupby(
-        list(SAMPLE_ID_COLUMNS),
-        sort=True,
-        dropna=False,
-    )[task_columns].nunique(dropna=False)
-
-    compound_task_id_set = []
-    seen = set()
-    for _, row in group_nunique.iterrows():
-        for column in task_columns:
-            if row[column] == 1 and column not in seen:
-                compound_task_id_set.append(column)
-                seen.add(column)
-
-    return {
-        "sample_count": sample_count,
-        "compound_task_id_set": compound_task_id_set,
-    }
-
-
-def summarize_output_type_metadata(df):
-    if df.empty:
-        return {}
-
-    metadata = {}
-
-    sample_summary = summarize_sample_output(df)
-    if sample_summary:
-        metadata["sample"] = sample_summary
-
-    quantile_summary = summarize_quantile_output(df)
-    if quantile_summary:
-        metadata["quantile"] = quantile_summary
-
-    return metadata
 
 
 def load_geodata_mapping():
@@ -604,11 +473,16 @@ def generate_output_type_metadata_html(output_type, output_type_metadata, is_ens
             sample_count = metadata.get("sample_count")
             compound_task_id_set = metadata.get("compound_task_id_set", [])
             if compound_task_id_set:
-                compound_display = ", ".join(escape(str(column)) for column in compound_task_id_set)
+                # The set is a list of column names; quote each one so it reads
+                # unambiguously, e.g. "origin_date", "target", "location".
+                compound_display = ", ".join(
+                    f'"{escape(str(column))}"' for column in compound_task_id_set
+                )
             else:
-                # An empty set means every task variable varies within a sample,
-                # i.e. samples are independent draws across all task variables.
-                compound_display = "None (samples independent across task variables)"
+                # An empty set does NOT mean the samples are independent across
+                # task variables (it is the opposite). Display it literally as
+                # [] so it is never misread.
+                compound_display = "[]"
 
             html += f"                    <strong>Number of samples:</strong> {escape(str(sample_count))}<br>\n"
             html += (
@@ -822,7 +696,12 @@ def parse_jsonld_to_html(jsonld_file, round_id):
         model_name = model.get("name", "Unknown Model")
         model_output_df = load_model_output_dataframe(round_id, model_name)
         parquet_html = format_first_n_rows_of_output(3, model_output_df)
-        output_type_metadata = summarize_output_type_metadata(model_output_df)
+        # Prefer the output-type metadata already stored in the JSON-LD (the
+        # canonical source); fall back to recomputing it from the parquet data
+        # for older JSON-LD files that predate that field.
+        output_type_metadata = model.get("workExample", {}).get("output_type_metadata")
+        if not output_type_metadata:
+            output_type_metadata = summarize_output_type_metadata(model_output_df)
 
         # Model header
         html += f"""    <div class="model" id="{model_id}">

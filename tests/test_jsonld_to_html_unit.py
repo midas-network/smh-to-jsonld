@@ -92,14 +92,16 @@ def test_output_types_section_empty_without_output_type():
 
 
 def test_summarize_sample_output_counts_samples_and_compound_task_ids():
+    # Each task cell (a location) holds two sample trajectories, and each
+    # trajectory (run) spans both locations. So there are 2 samples per cell,
+    # location varies within a sample, and target/horizon are constant within
+    # a sample.
     df = pd.DataFrame(
         {
             "output_type": ["sample", "sample", "sample", "sample"],
             "run_grouping": [1, 1, 2, 2],
             "stochastic_run": [1, 1, 1, 1],
-            "location": ["01", "01", "02", "02"],
-            "scenario_id": ["A", "B", "A", "B"],
-            "age_group": ["0-130", "0-130", "0-130", "0-130"],
+            "location": ["01", "02", "01", "02"],
             "target": ["inc hosp", "inc hosp", "inc hosp", "inc hosp"],
             "horizon": [1, 1, 1, 1],
             "value": [1.0, 2.0, 3.0, 4.0],
@@ -109,17 +111,24 @@ def test_summarize_sample_output_counts_samples_and_compound_task_ids():
     summary = summarize_sample_output(df)
 
     assert summary["sample_count"] == 2
-    assert summary["compound_task_id_set"] == ["location"]
+    # target and horizon are constant within a sample and are kept even though
+    # they are globally constant (the PR #30 fix); location varies within a
+    # sample, so it is excluded.
+    assert set(summary["compound_task_id_set"]) == {"target", "horizon"}
+    assert "location" not in summary["compound_task_id_set"]
 
 
 def test_summarize_sample_output_groups_by_run_tuple_without_string_collision():
+    # These two run tuples would collide if the run id were built by joining the
+    # columns into a string: ("1-2", "3") and ("1", "2-3") both become "1-2-3".
+    # Grouping on the tuple must keep them separate, so "location" — constant
+    # within each true run — stays in the compound task ID set.
     df = pd.DataFrame(
         {
             "output_type": ["sample", "sample"],
             "run_grouping": ["1-2", "1"],
             "stochastic_run": ["3", "2-3"],
             "location": ["01", "02"],
-            "scenario_id": ["A", "A"],
             "target": ["inc hosp", "inc hosp"],
             "value": [1.0, 2.0],
         }
@@ -127,7 +136,7 @@ def test_summarize_sample_output_groups_by_run_tuple_without_string_collision():
 
     summary = summarize_sample_output(df)
 
-    assert summary["sample_count"] == 2
+    assert "location" in summary["compound_task_id_set"]
 
 
 def test_summarize_quantile_output_sorts_and_formats_quantiles():
@@ -176,16 +185,31 @@ def test_ensemble_output_types_section_labels_quantiles_as_calculated():
     assert "Submitted quantiles" not in html
 
 
-def test_sample_metadata_describes_empty_compound_task_id_set_as_independent():
+def test_sample_metadata_displays_empty_compound_task_id_set_as_brackets():
     metadata = {"sample": {"sample_count": 300, "compound_task_id_set": []}}
 
     html = generate_output_type_metadata_html("sample", metadata)
 
-    # An empty compound task ID set is a meaningful Hubverse result (samples are
-    # independent across every task variable), not a failure to compute it.
-    assert "None detected" not in html
-    assert "independent" in html.lower()
+    # An empty compound task ID set does NOT mean the samples are independent
+    # across task variables (it is the opposite), so it must be displayed
+    # literally as [] rather than described as independent.
+    assert "independent" not in html.lower()
+    assert "[]" in html
     assert "Compound task ID set" in html
+
+
+def test_sample_metadata_quotes_compound_task_id_columns():
+    metadata = {
+        "sample": {
+            "sample_count": 25,
+            "compound_task_id_set": ["origin_date", "target", "location"],
+        }
+    }
+
+    html = generate_output_type_metadata_html("sample", metadata)
+
+    # The compound task ID set is a list of column names, so quote each one.
+    assert '"origin_date", "target", "location"' in html
 
 
 def test_sample_metadata_escapes_html_special_characters():

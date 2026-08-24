@@ -167,7 +167,7 @@ def update_source_data(rounds: List[str] = None, skip: bool = False) -> bool:
 
     print_header("Step 1: Updating Source Data")
 
-    command = ['python3', 'pipeline/update_source_data.py']
+    command = [sys.executable, 'pipeline/update_source_data.py']
     if rounds:
         command += ['--rounds', *rounds]
 
@@ -359,7 +359,7 @@ def generate_html(rounds: List[str] = None) -> bool:
         print_info(f"Converting {jsonld_file.name} to HTML...")
 
         success, _, _ = run_command(
-            ['python3', 'pipeline/jsonld_to_html.py',
+            [sys.executable, 'pipeline/jsonld_to_html.py',
              '-i', str(jsonld_file),
              '-o', str(output_file),
              '-r', round_id],

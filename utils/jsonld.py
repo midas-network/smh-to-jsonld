@@ -7,6 +7,7 @@ import yaml
 
 from utils.location import get_location_info
 from utils.model_output_smh import get_output_file_types
+from utils.output_type_summary import summarize_output_type_metadata
 from utils.tasks_smh import get_targets
 from utils.temporal import calculate_temporal_coverage
 
@@ -207,7 +208,7 @@ def add_temporal_coverage(jsonld_data, temporal_coverage):
         jsonld_data["workExample"]["temporalCoverage"] = temporal_coverage["interval"]
 
 
-def enrich_jsonld_with_model_output(jsonld_data, round_id, model_name, config, distinct_field_values):
+def enrich_jsonld_with_model_output(jsonld_data, round_id, model_name, config, distinct_field_values, model_output_df=None):
     """Enrich JSON-LD data with information from model output files."""
     # Extract field values
     output_types = distinct_field_values.get("output_type", [])
@@ -244,6 +245,13 @@ def enrich_jsonld_with_model_output(jsonld_data, round_id, model_name, config, d
         jsonld_data["workExample"]["ageGroups"] = age_groups
 
     add_temporal_coverage(jsonld_data, temporal_coverage)
+
+    # Store the sample / quantile output-type metadata so the canonical JSON-LD
+    # carries the same information the HTML page shows, making it queryable.
+    if model_output_df is not None and not model_output_df.empty:
+        output_type_metadata = summarize_output_type_metadata(model_output_df)
+        if output_type_metadata:
+            jsonld_data["workExample"]["output_type_metadata"] = output_type_metadata
 
 
 def remove_none_values(obj):
