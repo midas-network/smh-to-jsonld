@@ -174,7 +174,9 @@ Hub Coordination Group is the creator, model authors and teams are deduplicated
 contributors, projection intervals become dates, measured-variable ontology
 terms become subjects, and funding statements, methods, keywords, and round
 documentation links are retained. Unknown model licenses default to
-`zenodo-freetoread-1.0` and are recorded in `LICENSES.json`.
+`zenodo-freetoread-1.0` and are recorded in `LICENSES.json`. The uploader uses
+Zenodo's native record API for the mixed-license list and copyright statement,
+because the compatibility deposition API supports only one license.
 
 Build the release locally without contacting Zenodo:
 

@@ -144,6 +144,7 @@ def test_build_release_packages_rounds_outputs_and_checksums(tmp_path):
     assert licenses["models"][0]["effective_license"] == "zenodo-freetoread-1.0"
     assert licenses["models"][0]["fallback_applied"] is True
     assert licenses["license_counts"] == {"zenodo-freetoread-1.0": 1}
+    assert licenses["record_level_licenses"] == ["zenodo-freetoread-1.0"]
 
 
 def test_build_metadata_uses_internal_discovery_fields(tmp_path):
@@ -184,6 +185,39 @@ def test_build_metadata_uses_internal_discovery_fields(tmp_path):
         related["identifier"].endswith("/releases/tag/v0.1.0-beta.1")
         for related in metadata["related_identifiers"]
     )
+    assert "data/{round}/source_snapshot.json" in metadata["method"]
+
+
+def test_client_enriches_native_rights_and_copyright():
+    session = Mock()
+    session.headers = {}
+    session.get.return_value = FakeResponse(
+        200,
+        {
+            "metadata": {"title": "Dataset", "rights": [{"id": "old"}]},
+            "access": {"record": "public", "files": "public"},
+            "files": {"enabled": True},
+            "custom_fields": {"legacy:subjects": []},
+        },
+    )
+    session.put.return_value = FakeResponse(200, {"id": "46"})
+
+    make_client(session).enrich_draft_metadata(
+        46,
+        rights=["cc-by-4.0", "mit", "cc-by-4.0"],
+        copyright_statement="Copyright retained by the respective authors.",
+    )
+
+    request = session.put.call_args
+    assert request.args[0].endswith("/records/46/draft")
+    assert request.kwargs["headers"]["Accept"] == (
+        "application/vnd.inveniordm.v1+json"
+    )
+    assert request.kwargs["json"]["metadata"]["rights"] == [
+        {"id": "cc-by-4.0"},
+        {"id": "mit"},
+    ]
+    assert request.kwargs["json"]["metadata"]["copyright"].startswith("Copyright")
 
 
 def test_upload_release_creates_draft_without_publishing(tmp_path):

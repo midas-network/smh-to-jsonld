@@ -33,6 +33,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parent
 DEFAULT_API_URL = "https://sandbox.zenodo.org/api"
 DEFAULT_TOKEN_ENV = "ZENODO_SANDBOX_TOKEN"
 DEFAULT_RELEASE_DIR = REPOSITORY_ROOT / "release" / "zenodo"
+NATIVE_JSON_MEDIA_TYPE = "application/vnd.inveniordm.v1+json"
 SOURCE_REPOSITORY = "https://github.com/midas-network/rsv-scenario-modeling-hub"
 PARSER_REPOSITORY = "https://github.com/midas-network/smh-to-jsonld"
 PARSER_RELEASE_TAG = "v0.1.0-beta.1"
@@ -143,6 +144,56 @@ class ZenodoClient:
             timeout=self.timeout,
         )
         return self._json_response(response, {200}, "update the draft metadata")
+
+    def enrich_draft_metadata(
+        self,
+        deposition_id: int,
+        *,
+        rights: Iterable[str],
+        copyright_statement: str | None,
+    ) -> dict[str, Any]:
+        """Set native fields that Zenodo's legacy deposition API drops."""
+        headers = {
+            "Accept": NATIVE_JSON_MEDIA_TYPE,
+            "Content-Type": "application/json",
+        }
+        draft_url = f"{self.api_url}/records/{deposition_id}/draft"
+        response = self.session.get(
+            draft_url,
+            headers=headers,
+            timeout=self.timeout,
+        )
+        draft = self._json_response(
+            response, {200}, "retrieve the native draft metadata"
+        )
+        native_metadata = draft.get("metadata")
+        if not isinstance(native_metadata, dict):
+            raise ZenodoError("Zenodo did not return native metadata for the draft.")
+
+        license_ids = tuple(dict.fromkeys(value for value in rights if value))
+        if license_ids:
+            native_metadata["rights"] = [
+                {"id": license_id} for license_id in license_ids
+            ]
+        if copyright_statement:
+            native_metadata["copyright"] = copyright_statement
+
+        files = draft.get("files") or {}
+        payload = {
+            "metadata": native_metadata,
+            "access": draft.get("access") or {},
+            "files": {"enabled": bool(files.get("enabled", True))},
+            "custom_fields": draft.get("custom_fields") or {},
+        }
+        response = self.session.put(
+            draft_url,
+            headers=headers,
+            json=payload,
+            timeout=self.timeout,
+        )
+        return self._json_response(
+            response, {200}, "update the native draft metadata"
+        )
 
     def upload_file(self, bucket_url: str, path: Path) -> UploadedFile:
         parsed_bucket = urlparse(bucket_url)
@@ -371,9 +422,15 @@ def build_license_manifest(
         license_id = model["effective_license"]
         license_counts[license_id] = license_counts.get(license_id, 0) + 1
 
+    record_level_licenses = [
+        license_id for license_id in RECORD_LICENSE_IDS if license_id in license_counts
+    ]
+    record_level_licenses.extend(
+        sorted(set(license_counts).difference(record_level_licenses))
+    )
     return {
         "schema_version": "1.0",
-        "record_level_licenses": list(RECORD_LICENSE_IDS),
+        "record_level_licenses": record_level_licenses,
         "license_counts": dict(sorted(license_counts.items())),
         "unknown_license_fallback": DEFAULT_UNKNOWN_LICENSE,
         "unknown_license_policy": (
@@ -515,6 +572,7 @@ def upload_release(
     metadata: dict[str, Any],
     publish: bool,
     keep_failed_draft: bool = False,
+    record_license_ids: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     paths = tuple(path.resolve() for path in files)
     _validate_upload_files(paths)
@@ -526,6 +584,16 @@ def upload_release(
     links = deposition.get("links", {})
 
     try:
+        if metadata.get("copyright") or record_license_ids is not None:
+            client.enrich_draft_metadata(
+                deposition_id,
+                rights=(
+                    record_license_ids
+                    if record_license_ids is not None
+                    else (str(metadata.get("license") or ""),)
+                ),
+                copyright_statement=metadata.get("copyright"),
+            )
         bucket_url = links.get("bucket")
         if not isinstance(bucket_url, str):
             raise ZenodoError("Zenodo did not return a bucket URL for the new draft.")
@@ -592,6 +660,7 @@ def update_existing_draft(
     files: Iterable[Path],
     *,
     metadata: dict[str, Any],
+    record_license_ids: Iterable[str] | None = None,
 ) -> dict[str, Any]:
     """Upload the desired release, remove known obsolete files, then update metadata."""
     paths = tuple(path.resolve() for path in files)
@@ -607,6 +676,16 @@ def update_existing_draft(
     # Validate and apply metadata before touching files. If this fails, the draft's
     # existing file set is left unchanged.
     updated = client.update_deposition(deposition_id, metadata)
+    if metadata.get("copyright") or record_license_ids is not None:
+        client.enrich_draft_metadata(
+            deposition_id,
+            rights=(
+                record_license_ids
+                if record_license_ids is not None
+                else (str(metadata.get("license") or ""),)
+            ),
+            copyright_statement=metadata.get("copyright"),
+        )
     remote_by_name = {
         str(item.get("filename") or item.get("name")): item
         for item in deposition.get("files", [])
@@ -715,7 +794,7 @@ def build_metadata(
         "language": "eng",
         "method": (
             "Source snapshots are obtained from release-tagged rounds of the RSV "
-            "Scenario Modeling Hub. Each data/<round>/source_snapshot.json records "
+            "Scenario Modeling Hub. Each data/{round}/source_snapshot.json records "
             "the exact upstream tag and commit. The smh-to-jsonld pipeline preserves "
             "Hubverse configuration, model metadata, and Parquet projections; "
             "derives per-model and consolidated Schema.org JSON-LD; and renders HTML "
@@ -1060,6 +1139,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         metadata = build_metadata(args, rounds, REPOSITORY_ROOT)
+        record_license_ids = build_license_manifest(REPOSITORY_ROOT, rounds)[
+            "record_level_licenses"
+        ]
         release_files = build_release(
             repository_root=REPOSITORY_ROOT,
             release_dir=args.release_dir.resolve(),
@@ -1094,6 +1176,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.update_draft,
                     release_files,
                     metadata=metadata,
+                    record_license_ids=record_license_ids,
                 )
             else:
                 result = upload_release(
@@ -1102,6 +1185,7 @@ def main(argv: list[str] | None = None) -> int:
                     metadata=metadata,
                     publish=args.publish,
                     keep_failed_draft=args.keep_failed_draft,
+                    record_license_ids=record_license_ids,
                 )
     except (OSError, requests.RequestException, ValueError, ZenodoError) as exc:
         print(f"Zenodo release failed: {exc}", file=sys.stderr)
