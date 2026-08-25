@@ -13,6 +13,7 @@ import gzip
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -304,6 +305,7 @@ def build_release(
         )
 
     consolidated_outputs = _find_consolidated_outputs(repository_root, selected_rounds)
+    loose_outputs: list[Path] = []
     for round_id in selected_rounds:
         entries: list[tuple[Path, str]] = []
         if include_source_data:
@@ -329,6 +331,19 @@ def build_release(
             required_prefixes=[archive_name for _, archive_name in entries],
         )
         artifacts.append(destination)
+
+        if include_generated_output:
+            # Publish the consolidated JSON-LD/HTML as loose files as well. The
+            # archive keeps a citable, self-contained bundle together, but a file
+            # sealed inside a tarball cannot be fetched over HTTP or read by a
+            # crawler or metadata harvester -- which is most of the reason to
+            # publish JSON-LD at all. Zenodo gives every uploaded file its own
+            # stable URL, so these stay directly retrievable next to the archive.
+            for output in consolidated_outputs[round_id]:
+                loose_path = release_dir / output.name
+                if loose_path != output:
+                    shutil.copy2(output, loose_path)
+                loose_outputs.append(loose_path)
 
     # This was used by the first prototype. Generated files now live with each round.
     (release_dir / "rsv-smh-generated-output.tar.gz").unlink(missing_ok=True)
@@ -374,7 +389,13 @@ def build_release(
         json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
 
-    checksum_inputs = [*artifacts, readme_path, licenses_path, provenance_path]
+    checksum_inputs = [
+        *artifacts,
+        *loose_outputs,
+        readme_path,
+        licenses_path,
+        provenance_path,
+    ]
     checksum_path = release_dir / "SHA256SUMS"
     checksum_path.write_text(
         "".join(
@@ -512,6 +533,10 @@ Each archive preserves the following layout:
 
 The files beside the archives are:
 
+- `*.jsonld` and `*.html`: the consolidated round metadata, published outside the
+  archives as well so each file can be fetched directly from its own URL without
+  downloading and unpacking an archive first. These are byte-identical to the
+  copies under `output/` inside the matching archive.
 - `LICENSES.json`: model-round license assignments and fallback decisions.
 - `release_metadata.json`: parser and source provenance plus artifact hashes.
 - `SHA256SUMS`: SHA-256 checksums for release files.

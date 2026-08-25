@@ -115,11 +115,24 @@ def test_build_release_packages_rounds_outputs_and_checksums(tmp_path):
 
     assert [path.name for path in files] == [
         "rsv-smh-2025-07-27.tar.gz",
+        "Round_1_2025-2026_v6.0.0.jsonld",
+        "Round_1_2025-2026_v6.0.0.html",
         "README.md",
         "LICENSES.json",
         "release_metadata.json",
         "SHA256SUMS",
     ]
+
+    # The consolidated metadata is uploaded outside the archive too, so it can be
+    # fetched directly instead of only existing inside a tarball.
+    loose_jsonld = files[1]
+    assert loose_jsonld.parent == tmp_path / "release"
+    assert json.loads(loose_jsonld.read_text(encoding="utf-8"))["roundId"] == round_id
+    assert (
+        loose_jsonld.read_bytes()
+        == (repository / "output" / "Round_1_2025-2026_v6.0.0.jsonld").read_bytes()
+    )
+
     with tarfile.open(files[0], "r:gz") as archive:
         names = archive.getnames()
         assert "data/2025-07-27/model-output/NIH-RSV/model.parquet" in names
@@ -128,7 +141,8 @@ def test_build_release_packages_rounds_outputs_and_checksums(tmp_path):
         assert not any(name.endswith(".DS_Store") for name in archive.getnames())
 
     checksum_lines = files[-1].read_text(encoding="utf-8").splitlines()
-    assert len(checksum_lines) == 4
+    assert len(checksum_lines) == 6
+    assert any(line.endswith("  Round_1_2025-2026_v6.0.0.jsonld") for line in checksum_lines)
     metadata = json.loads(files[-2].read_text(encoding="utf-8"))
     assert metadata["rounds"] == ["2025-07-27"]
     assert metadata["source_snapshots"][0]["ref"] == "2025-07-27-v3"
@@ -137,10 +151,11 @@ def test_build_release_packages_rounds_outputs_and_checksums(tmp_path):
         metadata["artifacts"][0]["sha256"]
         == hashlib.sha256(files[0].read_bytes()).hexdigest()
     )
-    release_readme = files[1].read_text(encoding="utf-8")
+    by_name = {path.name: path for path in files}
+    release_readme = by_name["README.md"].read_text(encoding="utf-8")
     assert "not unconditional forecasts" in release_readme
     assert "2025-07-27-v3" in release_readme
-    licenses = json.loads(files[2].read_text(encoding="utf-8"))
+    licenses = json.loads(by_name["LICENSES.json"].read_text(encoding="utf-8"))
     assert licenses["models"][0]["effective_license"] == "zenodo-freetoread-1.0"
     assert licenses["models"][0]["fallback_applied"] is True
     assert licenses["license_counts"] == {"zenodo-freetoread-1.0": 1}
