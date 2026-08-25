@@ -1,14 +1,17 @@
 import argparse
+import datetime
+import io
+import json
 import os
 import re
 import shutil
-import tempfile
 import subprocess
-import datetime
-import io
 import sys
-import pandas as pd
+import tempfile
 from contextlib import redirect_stdout
+from pathlib import Path
+
+import pandas as pd
 
 # Add parent directory to path to allow imports from utils
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -27,23 +30,80 @@ def clone_and_extract_dirs(repo_url, dirs_to_copy, output_dir, ref='main', ref_t
         ref (str): Branch name or tag to checkout (default: main)
         ref_type (str): Type of reference ('branch' or 'tag')
     """
-    with tempfile.TemporaryDirectory() as tmpdir:
+    temp_parent = Path(output_dir).resolve().parent
+    temp_parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".smh-source-", dir=temp_parent) as tmpdir:
         print(f"📥 Cloning {repo_url} ({ref_type}: {ref}) into temp folder...")
         if ref_type == 'tag':
-            # For tags, we first do a shallow clone and then fetch the specific tag
-            subprocess.run(["git", "clone", "--depth", "1", repo_url, tmpdir], check=True)
-            # Navigate to the cloned directory
-            current_dir = os.getcwd()
-            os.chdir(tmpdir)
+            # Avoid materializing unrelated auxiliary-data history and large files.
+            subprocess.run(
+                [
+                    "git",
+                    "clone",
+                    "--filter=blob:none",
+                    "--no-checkout",
+                    "--depth",
+                    "1",
+                    repo_url,
+                    tmpdir,
+                ],
+                check=True,
+            )
             # Fetch the specific tag
-            subprocess.run(["git", "fetch", "--depth", "1", "origin", f"refs/tags/{ref}:refs/tags/{ref}"], check=True)
-            # Checkout the tag; -c advice.detachedHead=false suppresses the detached HEAD advisory
-            subprocess.run(["git", "-c", "advice.detachedHead=false", "checkout", f"tags/{ref}"], check=True)
-            # Return to original directory
-            os.chdir(current_dir)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    tmpdir,
+                    "fetch",
+                    "--depth",
+                    "1",
+                    "origin",
+                    f"refs/tags/{ref}:refs/tags/{ref}",
+                ],
+                check=True,
+            )
         else:
-            # For branches, use the original approach
-            subprocess.run(["git", "clone", "--depth", "1", "--branch", ref, repo_url, tmpdir], check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "clone",
+                    "--filter=blob:none",
+                    "--no-checkout",
+                    "--depth",
+                    "1",
+                    "--branch",
+                    ref,
+                    repo_url,
+                    tmpdir,
+                ],
+                check=True,
+            )
+
+        subprocess.run(
+            ["git", "-C", tmpdir, "sparse-checkout", "set", *dirs_to_copy],
+            check=True,
+        )
+        checkout_ref = f"tags/{ref}" if ref_type == "tag" else ref
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                tmpdir,
+                "-c",
+                "advice.detachedHead=false",
+                "checkout",
+                checkout_ref,
+            ],
+            check=True,
+        )
+
+        source_commit = subprocess.run(
+            ["git", "-C", tmpdir, "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
 
         for relative_path in dirs_to_copy:
             src = os.path.join(tmpdir, relative_path)
@@ -55,6 +115,23 @@ def clone_and_extract_dirs(repo_url, dirs_to_copy, output_dir, ref='main', ref_t
                 print(f"⚠️ Directory not found: {relative_path}")
 
         print(f"✅ Done! Selected directories copied to {output_dir}")
+        return source_commit
+
+
+def write_source_snapshot(output_dir, repo_url, ref, ref_type, commit):
+    """Record the exact upstream source revision copied into a round."""
+    snapshot = {
+        "repository": repo_url,
+        "ref": ref,
+        "ref_type": ref_type,
+        "commit": commit,
+        "retrieved_at": datetime.datetime.now(datetime.UTC).isoformat(),
+    }
+    snapshot_path = Path(output_dir) / "source_snapshot.json"
+    snapshot_path.write_text(
+        json.dumps(snapshot, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def get_github_release_tags(repo_url, last_version=True):
@@ -272,7 +349,12 @@ if __name__ == "__main__":
                     os.makedirs(tag_output_dir, exist_ok=True)
 
                     print(f"\n🏷️ Processing tag: {tag}")
-                    clone_and_extract_dirs(repo_url, directories, tag_output_dir, tag, 'tag')
+                    source_commit = clone_and_extract_dirs(
+                        repo_url, directories, tag_output_dir, tag, 'tag'
+                    )
+                    write_source_snapshot(
+                        tag_output_dir, repo_url, tag, 'tag', source_commit
+                    )
                     print(f"Cleaning Round: {round_id}")
                     round_dir = os.path.join(base_output_dir, round_id)
                     keep_only_round_files(round_dir, round_id)
@@ -299,4 +381,3 @@ if __name__ == "__main__":
         log_file.write(log_content)
 
     print(f"Log saved to {log_file_path}")
-

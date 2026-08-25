@@ -1,4 +1,8 @@
-This tool processes RSV Forecasting Hub model outputs and generates consolidated JSON-LD metadata files for each forecasting round.
+This tool processes RSV Scenario Modeling Hub model outputs and generates
+consolidated JSON-LD metadata files for each scenario round.
+
+The current beta release is
+[`v0.1.0-beta.1`](https://github.com/midas-network/smh-to-jsonld/releases/tag/v0.1.0-beta.1).
 
 ## Installation
 
@@ -156,3 +160,69 @@ The generated JSON-LD files contain comprehensive metadata about each forecastin
 - Temporal coverage
 
 Each round's data is saved as `round_[ROUND_ID].jsonld` in the output directory.
+
+## Publish to Zenodo Sandbox
+
+`publish_to_zenodo.py` creates one self-contained archive per round containing
+its source Parquet/configuration data and generated JSON-LD/HTML. It also creates
+a top-level dataset `README.md`, `LICENSES.json`, SHA-256 checksums, and
+provenance metadata, then uploads them through the Zenodo deposition API. It
+creates an unpublished draft unless `--publish` is explicitly supplied.
+
+Zenodo metadata is derived from the consolidated JSON-LD: the Scenario Modeling
+Hub Coordination Group is the creator, model authors and teams are deduplicated
+contributors, projection intervals become dates, measured-variable ontology
+terms become subjects, and funding statements, methods, keywords, and round
+documentation links are retained. Unknown model licenses default to
+`zenodo-freetoread-1.0` and are recorded in `LICENSES.json`.
+
+Build the release locally without contacting Zenodo:
+
+```bash
+uv run publish_to_zenodo.py --dry-run
+```
+
+Create an unpublished Sandbox draft:
+
+```bash
+uv run --env-file .env publish_to_zenodo.py \
+  --reuse-archives
+```
+
+Review the returned draft URL and its metadata. Model outputs have
+model-specific licenses, so publication additionally requires an explicit
+rights-review acknowledgement. Publish that same reviewed draft by ID:
+
+```bash
+uv run --env-file .env publish_to_zenodo.py \
+  --publish-draft YOUR_DEPOSITION_ID \
+  --acknowledge-rights-reviewed
+```
+
+For automation that should create, upload, and publish in one run, use
+`--publish --acknowledge-rights-reviewed` instead.
+
+Synchronize regenerated files and metadata into an existing unpublished draft:
+
+```bash
+uv run --env-file .env publish_to_zenodo.py \
+  --reuse-archives \
+  --update-draft YOUR_DEPOSITION_ID
+```
+
+On production Zenodo, `--community midas-network` requests inclusion in the
+MIDAS Network community. Sandbox has a separate community registry, so that
+production community should not be added to a Sandbox draft.
+
+Use `--metadata-file metadata.json` for complete creator, affiliation, ORCID,
+license, funding, and related-identifier metadata. Use `--help` for round,
+packaging, and Sandbox API options. Tokens are sent as HTTPS bearer headers and
+are never written into the release files.
+
+## License
+
+The `smh-to-jsonld` software in this repository is licensed under the
+[Apache License 2.0](LICENSE). This software license does not relicense the
+Scenario Modeling Hub model outputs, metadata, or auxiliary data. Those
+research objects retain their model- and source-specific terms; Zenodo release
+packages record them in `LICENSES.json`.

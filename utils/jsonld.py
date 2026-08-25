@@ -13,6 +13,27 @@ from utils.temporal import calculate_temporal_coverage
 
 ROUND_DEFINITION_BRANCH = "main"
 ROUND_DEFINITION_FOLDER = "auxiliary-data/rounds"
+DEFAULT_UNKNOWN_LICENSE = "zenodo-freetoread-1.0"
+UNKNOWN_LICENSE_VALUES = {
+    "",
+    "na",
+    "n/a",
+    "nan",
+    "none",
+    "null",
+    "tbd",
+    "unknown",
+}
+
+
+def normalize_license(license_value):
+    """Return a declared license or the conservative Zenodo fallback."""
+    if license_value is None:
+        return DEFAULT_UNKNOWN_LICENSE
+    normalized = str(license_value).strip()
+    if normalized.casefold() in UNKNOWN_LICENSE_VALUES:
+        return DEFAULT_UNKNOWN_LICENSE
+    return normalized
 
 
 def initialize_work_example(jsonld_data):
@@ -280,18 +301,10 @@ def yaml_to_jsonld(yaml_file_path):
         ##"alternateName": data.get("model_abbr"),
         "description": data.get("methods_long") or data.get("methods"),
         "version": data.get("model_version"),
-        "license": data.get("license"),
-
-        # Add RSV disease information
-
-        "version": data.get("model_version")
-        # Add RSV disease information
+        "license": normalize_license(data.get("license")),
     }
 
     missing_val = ["NA", "na", "TBD", "N/A", "NaN"]
-
-    if data.get("license") not in missing_val:
-        jsonld["license"] = data.get("license")
 
     if data.get("website_url") not in missing_val:
         jsonld["website"] = data.get("website_url")

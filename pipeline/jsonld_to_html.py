@@ -84,6 +84,9 @@ def get_license_map():
 
         # Government / Other
         "OGL-3.0":      "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+        "ZENODO-FREETOREAD-1.0": (
+            "https://zenodo.org/api/vocabularies/licenses/zenodo-freetoread-1.0"
+        ),
     }
     
 
